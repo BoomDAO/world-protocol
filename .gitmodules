@@ -1,0 +1,9 @@
+[submodule "PaymentStandard¯"]
+	path = PaymentStandard¯
+	url = https://github.com/BoomDAO/PaymentStandard.git
+[submodule "StakingStandard"]
+	path = StakingStandard
+	url = https://github.com/BoomDAO/StakingStandard.git
+[submodule "DatabaseStandard"]
+	path = DatabaseStandard
+	url = https://github.com/BoomDAO/DatabaseStandard.git
