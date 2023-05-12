@@ -29,11 +29,11 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import JSON "../utils/Json";
-import Parser "../utils/Parser";
-import Types "users.types";
-import Utils "../utils/Helpers";
-import ENV "../utils/Env";
+import JSON "./utils/Json";
+import Parser "./utils/Parser";
+import Types "Types";
+import Utils "./utils/Utils";
+import ENV "./utils/Env";
 
 actor class Users() {
   //stable memory for DB
@@ -54,12 +54,10 @@ actor class Users() {
     return false;
   };
   //validating Core Canister as caller
-  private func _isRoot(p : Principal) : (Bool) {
+  private func _isCore(p : Principal) : (Bool) {
     let _p : Text = Principal.toText(p);
-    for(i in ENV.root.vals()){
-        if(_p == i){
-            return true;
-        }
+    if (_p == ENV.core) {
+      return true;
     };
     return false;
   };
@@ -359,14 +357,14 @@ actor class Users() {
   };
 
   public shared ({ caller }) func executeCoreTx(_uid : Text, t : Types.CoreTxData) : async () {
-    assert (_isRoot(caller)); //only core canister can update CoreData of user
+    assert (_isCore(caller)); //only core canister can update CoreData of user
     await _executeCoreTx(_uid, t);
   };
 
   //Profile update
   //
   public shared ({ caller }) func _setUsername(_uid : Text, _name : Text) : async (Text) {
-    assert (_isRoot(caller));
+    assert (_isCore(caller));
     switch (Trie.find(_usersCore, Utils.keyT(_uid), Text.equal)) {
       case (?d) {
         var cd : Types.CoreData = {
@@ -390,7 +388,7 @@ actor class Users() {
   //CRUD
   //
   public shared ({ caller }) func admin_create_user(_uid : Text) : async () {
-    assert (_isRoot(caller));
+    assert (_isCore(caller));
     var cd : Types.CoreData = {
       profile = {
         name = "";
@@ -500,13 +498,13 @@ actor class Users() {
 
   //update new Games canister_ids for validation
   public shared ({ caller }) func add_game(g : Text) : async () {
-    assert (_isRoot(caller));
+    assert (_isCore(caller));
     var b : Buffer.Buffer<Text> = Buffer.fromArray(_games);
     b.add(g);
     _games := Buffer.toArray(b);
   };
   public shared ({ caller }) func remove_game(g : Text) : async () {
-    assert (_isRoot(caller));
+    assert (_isCore(caller));
     var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
     for (i in _games.vals()) {
       if (i != g) {
