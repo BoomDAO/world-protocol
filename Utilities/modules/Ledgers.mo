@@ -1,5 +1,5 @@
-import ICP "../utils/icp.types";
-import ICRC1 "../utils/icrc.types";
+import ICP "../types/icp.types";
+import ICRC1 "../types/icrc.types";
 
 module {
     //IC Ledger Canister Interface
@@ -17,5 +17,6 @@ module {
     //ICRC-1 Ledger Canister Interface
     public type ICRC1 = actor {
         get_transactions : shared query (ICRC1.GetTransactionsRequest) -> async (ICRC1.GetTransactionsResponse);
+        icrc1_transfer : (ICRC1.TransferArg) -> async (ICRC1.Result);
     };
 };

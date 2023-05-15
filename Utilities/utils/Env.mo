@@ -38,4 +38,5 @@ module {
     public let admins = []; //add admin principal for access control over DB
 
     public let paymenthub_canister_id = "s55qq-oqaaa-aaaaa-aaakq-cai"; //!avoid changing this!
+    public let stakinghub_canister_id = "";
 };

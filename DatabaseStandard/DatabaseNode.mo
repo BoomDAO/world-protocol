@@ -29,11 +29,11 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import JSON "./utils/Json";
-import Parser "./utils/Parser";
-import Types "Types";
-import Utils "./utils/Utils";
-import ENV "./utils/Env";
+import JSON "../Utilities/utils/Json";
+import Parser "../Utilities/utils/Parser";
+import Types "../Utilities/types/database.types";
+import Utils "../Utilities/utils/Utils";
+import ENV "../Utilities/utils/Env";
 
 actor class Users() {
   //stable memory for DB

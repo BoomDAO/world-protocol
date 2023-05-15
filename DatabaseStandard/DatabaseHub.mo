@@ -30,18 +30,18 @@ import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
 import Users "./DatabaseNode";
-import TUsers "./Types";
-import JSON "./utils/Json";
-import Parser "./utils/Parser";
-import ENV "./utils/Env";
-import Utils "./utils/Utils";
-import AccountIdentifier "./utils/AccountIdentifier";
-import Hex "./utils/Hex";
-import EXTCORE "./utils/Core";
-import EXT "./utils/ext.types";
-import Gacha "./modules/Gacha";
-import Configs "./modules/Configs";
-import Management "./modules/Management";
+import TUsers "../Utilities/types/database.types";
+import JSON "../Utilities/utils/Json";
+import Parser "../Utilities/utils/Parser";
+import ENV "../Utilities/utils/Env";
+import Utils "../Utilities/utils/Utils";
+import AccountIdentifier "../Utilities/utils/AccountIdentifier";
+import Hex "../Utilities/utils/Hex";
+import EXTCORE "../Utilities/utils/Core";
+import EXT "../Utilities/types/ext.types";
+import Gacha "../Utilities/modules/Gacha";
+import Configs "../Utilities/modules/Configs";
+import Management "../Utilities/modules/Management";
 
 actor Core {
     //stable memory

@@ -29,57 +29,111 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import JSON "/utils/Json";
-import AccountIdentifier "/utils/AccountIdentifier";
-import Core "/utils/Core";
-import Hex "/utils/Hex";
-import ICP "/utils/icp.types";
-import ICRC1 "/utils/icrc.types";
-import ENV "/utils/Env";
-import Ledger "/modules/Ledgers";
-import Utils "/utils/Utils";
+import JSON "../Utilities/utils/Json";
+import AccountIdentifier "../Utilities/utils/AccountIdentifier";
+import Core "../Utilities/utils/Core";
+import Hex "../Utilities/utils/Hex";
+import ICP "../Utilities/types/icp.types";
+import ICRC1 "../Utilities/types/icrc.types";
+import ENV "../Utilities/utils/Env";
+import Ledger "../Utilities/modules/Ledgers";
+import Utils "../Utilities/utils/Utils";
 
-actor PaymentHub {
+//Note : This configuration of StakingHub canister is only for 24hr staking period and is experimental, may get changed in future
+actor StakingHub {
+  type ICPStake = {
+    amount : Nat64;
+    stakedAt : Int;
+  };
+  type ICRCStake = {
+    amount : Nat;
+    stakedAt : Int;
+  };
+  type EXTStake = {
+    tokenIndex : Nat32;
+    stakedAt : Int;
+  };
+
   //Txs block heights
   private stable var icp_txs : Trie.Trie<Text, ICP.Tx> = Trie.empty(); //last 2000 txs of IC Ledger (verified in Payments canister) to prevent spam check in Payments canister
   private stable var icrc_txs : Trie.Trie<Text, Trie.Trie<Text, ICP.Tx_ICRC>> = Trie.empty(); // (icrc_token_canister_id -> tx_height -> Tx) last 2000 txs of ICRC-1 Ledger (verified in Payments canister) to prevent spam check in Payments canister
-  private stable var icp_holdings : Trie.Trie<Text, Nat64> = Trie.empty(); //mapping game_canister_id -> ICP value they hodl
-  private stable var icrc_holdings : Trie.Trie<Text, Trie.Trie<Text, Nat>> = Trie.empty(); //mapping game_canister_id -> icrc_token_canister_id -> ICRC-1 token they hold
+  private stable var icp_stakes : Trie.Trie<Text, ICPStake> = Trie.empty(); //mapping user_principal -> ICP value they stake
+  private stable var icrc_stakes : Trie.Trie<Text, Trie.Trie<Text, ICRCStake>> = Trie.empty(); //mapping user_principal -> icrc_token_canister_id -> ICRC-1 token they hold
 
-  //Internals
-  private func update_holdings(_gcid : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text) : () {
+  //to update Stakes of ICP/ICRC-1 tokens
+  private func update_stakes(_of : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text) : () {
     switch (_type) {
       case ("ICP") {
-        switch (Trie.find(icp_holdings, Utils.keyT(_gcid), Text.equal)) {
+        switch (Trie.find(icp_stakes, Utils.keyT(_of), Text.equal)) {
           case (?h) {
-            icp_holdings := Trie.put(icp_holdings, Utils.keyT(_gcid), Text.equal, (_amt + h)).0;
+            icp_stakes := Trie.put(
+              icp_stakes,
+              Utils.keyT(_of),
+              Text.equal,
+              {
+                amount = (_amt + h.amount);
+                stakedAt = Time.now();
+              },
+            ).0;
           };
           case _ {
-            icp_holdings := Trie.put(icp_holdings, Utils.keyT(_gcid), Text.equal, _amt).0;
+            icp_stakes := Trie.put(
+              icp_stakes,
+              Utils.keyT(_of),
+              Text.equal,
+              {
+                amount = _amt;
+                stakedAt = Time.now();
+              },
+            ).0;
           };
         };
       };
       case ("ICRC") {
         var _tcid : Text = Option.get(token_canister_id, "");
-        switch (Trie.find(icrc_holdings, Utils.keyT(_gcid), Text.equal)) { 
+        switch (Trie.find(icrc_stakes, Utils.keyT(_of), Text.equal)) {
           case (?_trie) {
             switch (Trie.find(_trie, Utils.keyT(_tcid), Text.equal)) {
               case (?h) {
-                var t : Trie.Trie<Text, Nat> = _trie;
-                t := Trie.put(t, Utils.keyT(_tcid), Text.equal, (Nat64.toNat(_amt) + h)).0;
-                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(_gcid), Text.equal, t).0;
+                var t : Trie.Trie<Text, ICRCStake> = _trie;
+                t := Trie.put(
+                  t,
+                  Utils.keyT(_tcid),
+                  Text.equal,
+                  {
+                    amount = (Nat64.toNat(_amt) + h.amount);
+                    stakedAt = Time.now();
+                  },
+                ).0;
+                icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_of), Text.equal, t).0;
               };
               case _ {
-                var t : Trie.Trie<Text, Nat> = Trie.empty();
-                t := Trie.put(t, Utils.keyT(_tcid), Text.equal, Nat64.toNat(_amt)).0;
-                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(_gcid), Text.equal, t).0;
+                var t : Trie.Trie<Text, ICRCStake> = Trie.empty();
+                t := Trie.put(
+                  t,
+                  Utils.keyT(_tcid),
+                  Text.equal,
+                  {
+                    amount = (Nat64.toNat(_amt));
+                    stakedAt = Time.now();
+                  },
+                ).0;
+                icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_of), Text.equal, t).0;
               };
             };
           };
           case _ {
-            var _t : Trie.Trie<Text, Nat> = Trie.empty();
-            _t := Trie.put(_t, Utils.keyT(_tcid), Text.equal, Nat64.toNat(_amt)).0;
-            icrc_holdings := Trie2D.put(icrc_holdings, Utils.keyT(_gcid), Text.equal, _t).0;
+            var _t : Trie.Trie<Text, ICRCStake> = Trie.empty();
+            _t := Trie.put(
+              _t,
+              Utils.keyT(_tcid),
+              Text.equal,
+              {
+                amount = (Nat64.toNat(_amt));
+                stakedAt = Time.now();
+              },
+            ).0;
+            icrc_stakes := Trie2D.put(icrc_stakes, Utils.keyT(_of), Text.equal, _t).0;
           };
         };
       };
@@ -167,9 +221,9 @@ actor PaymentHub {
   };
 
   //prevent spam ICP txs and perform action on successfull unique tx
-  public shared (msg) func verify_tx_icp(height : Nat64, _to : Text, _from : Text, _amt : Nat64) : async (ICP.Response) {
+  public shared (msg) func update_icp_stakes(height : Nat64, _to : Text, _from : Text, _amt : Nat64) : async (ICP.Response) {
     assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
+    assert (Principal.fromText(_to) == Principal.fromText(ENV.stakinghub_canister_id)); //If payment is done to correct stakinghub_canister
     var amt_ : ICP.Tokens = {
       e8s = _amt;
     };
@@ -183,7 +237,7 @@ actor PaymentHub {
         };
         case null {};
       };
-      //update latest tx details in Payments canister memory
+      //update latest tx details in StakingHub canister memory
       if (Trie.size(icp_txs) < 2000) {
         icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
       } else {
@@ -196,9 +250,8 @@ actor PaymentHub {
         icp_txs := Trie.remove(icp_txs, Utils.keyT(Nat64.toText(oldestTx)), Text.equal).0;
         icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
       };
-
-      //update holdings of game_canister accordingly
-      update_holdings(Principal.toText(msg.caller), _amt, "ICP", null);
+      //update stakes of user who did the payment
+      update_stakes(Principal.toText(msg.caller), _amt, "ICP", null);
       return #Success("successfull");
     } else {
       return #Err "invalid tx!";
@@ -206,17 +259,17 @@ actor PaymentHub {
   };
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
-  public shared (msg) func verify_tx_icrc(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (ICP.Response) {
+  public shared (msg) func update_icrc_stakes(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (ICP.Response) {
     assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
+    assert (Principal.fromText(_to) == Principal.fromText(ENV.stakinghub_canister_id));
     var res : Result.Result<Text, Text> = await query_icrc_tx(index, _to, _from, _amt);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(token_canister_id), Text.equal)) {
         case (?_txs) {
-          _token_txs := _txs; 
-          switch (Trie.find(_txs, Utils.keyT(Nat.toText(index)), Text.equal)){
-            case (?tx){
+          _token_txs := _txs;
+          switch (Trie.find(_txs, Utils.keyT(Nat.toText(index)), Text.equal)) {
+            case (?tx) {
               return #Err("old tx index for ICRC-1 Token : " #token_canister_id);
             };
             case _ {};
@@ -240,11 +293,80 @@ actor PaymentHub {
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(token_canister_id), Text.equal, _token_txs).0;
       };
 
-      update_holdings(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id);
+      update_stakes(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id);
       return #Success("successfull");
     } else {
       return #Err "ledger query failed!";
     };
   };
 
+  public shared ({ caller }) func process_withdrawal(_type : Text) : async () {
+    let delay = 86400000000000; //24hrs in nanoseconds
+    //ICP withdrawal processing
+    for ((_to, _stakes) in Trie.iter(icp_stakes)) {
+      let minimum_amount_to_withdraw : Nat64 = 100000000; //adjust it accordingly, here its 1 ICP
+      if ((_stakes.stakedAt + delay <= Time.now()) and _stakes.amount >= minimum_amount_to_withdraw) {
+        var amt : Nat64 = _stakes.amount - 10000; //deducting fees from user stakes for ICP, you can change it accordingly
+        var _req : ICP.TransferArgs = {
+          to = Hex.decode(AccountIdentifier.fromText(_to, null));
+          fee = {
+            e8s = 10000;
+          };
+          memo = 0;
+          from_subaccount = null;
+          created_at_time = null;
+          amount = {
+            e8s = amt;
+          };
+        };
+        let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
+        var res : ICP.TransferResult = await ICP_Ledger.transfer(_req);
+        let x : Nat64 = 0;
+        icp_stakes := Trie.put(
+          icp_stakes,
+          Utils.keyT(_to),
+          Text.equal,
+          {
+            amount = x;
+            stakedAt = Time.now();
+          },
+        ).0;
+      };
+    };
+
+    //ICRC-1 withdrawal processing
+    for ((_to, _trie) in Trie.iter(icrc_stakes)) {
+      for ((_canister_id, _stakes) in Trie.iter(_trie)) {
+        let minimum_amount_to_withdraw : Nat = 100; //adjust it accordingly
+        if ((_stakes.stakedAt + delay <= Time.now()) and _stakes.amount >= minimum_amount_to_withdraw) {
+          var amt : Nat = _stakes.amount - 10; //deducting fees from user stakes for ckBTC, you can change it accordingly for different ICRC-1 Tokens
+          var _req : ICRC1.TransferArg = {
+            to = {
+              owner = Principal.fromText(_to);
+              subaccount = null;
+            };
+            fee = null;
+            memo = null;
+            from_subaccount = null;
+            created_at_time = null;
+            amount = amt;
+          };
+          let ICRC1_Ledger : Ledger.ICRC1 = actor (_canister_id);
+          var res : ICRC1.Result = await ICRC1_Ledger.icrc1_transfer(_req);
+          let x : Nat = 0;
+          var t : Trie.Trie<Text, ICRCStake> = _trie;
+          t := Trie.put(
+            t,
+            Utils.keyT(_canister_id),
+            Text.equal,
+            {
+              amount = x;
+              stakedAt = Time.now();
+            },
+          ).0;
+          icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_to), Text.equal, t).0;
+        };
+      };
+    };
+  };
 };
