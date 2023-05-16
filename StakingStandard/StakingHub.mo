@@ -31,7 +31,7 @@ import Trie2D "mo:base/Trie";
 
 import JSON "../Utilities/utils/Json";
 import AccountIdentifier "../Utilities/utils/AccountIdentifier";
-import Core "../Utilities/utils/Core";
+import EXTCORE "../Utilities/utils/Core";
 import Hex "../Utilities/utils/Hex";
 import ICP "../Utilities/types/icp.types";
 import ICRC1 "../Utilities/types/icrc.types";
@@ -50,6 +50,7 @@ actor StakingHub {
     stakedAt : Int;
   };
   type EXTStake = {
+    staker : Text; //principal
     tokenIndex : Nat32;
     stakedAt : Int;
   };
@@ -57,11 +58,12 @@ actor StakingHub {
   //Txs block heights
   private stable var icp_txs : Trie.Trie<Text, ICP.Tx> = Trie.empty(); //last 2000 txs of IC Ledger (verified in Payments canister) to prevent spam check in Payments canister
   private stable var icrc_txs : Trie.Trie<Text, Trie.Trie<Text, ICP.Tx_ICRC>> = Trie.empty(); // (icrc_token_canister_id -> tx_height -> Tx) last 2000 txs of ICRC-1 Ledger (verified in Payments canister) to prevent spam check in Payments canister
-  private stable var icp_stakes : Trie.Trie<Text, ICPStake> = Trie.empty(); //mapping user_principal -> ICP value they stake
-  private stable var icrc_stakes : Trie.Trie<Text, Trie.Trie<Text, ICRCStake>> = Trie.empty(); //mapping user_principal -> icrc_token_canister_id -> ICRC-1 token they hold
+  private stable var icp_stakes : Trie.Trie<Text, ICPStake> = Trie.empty(); //mapping user_principal -> ICP value stake user stake
+  private stable var icrc_stakes : Trie.Trie<Text, Trie.Trie<Text, ICRCStake>> = Trie.empty(); //mapping user_principal -> icrc_token_canister_id -> ICRC-1 token stake user hold
+  private stable var ext_stakes : Trie.Trie<Text, EXTStake> = Trie.empty(); //mapping "(ext_collection_canister_id + / + index)" -> Ext NFT stake user hold
 
-  //to update Stakes of ICP/ICRC-1 tokens
-  private func update_stakes(_of : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text) : () {
+  //to update Stakes of ICP/ICRC/EXT tokens
+  private func _update_stakes(_of : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text, nft_index : ?Nat32) : () {
     switch (_type) {
       case ("ICP") {
         switch (Trie.find(icp_stakes, Utils.keyT(_of), Text.equal)) {
@@ -136,6 +138,17 @@ actor StakingHub {
             icrc_stakes := Trie2D.put(icrc_stakes, Utils.keyT(_of), Text.equal, _t).0;
           };
         };
+      };
+      case ("EXT") {
+        var key : Text = Option.get(token_canister_id, "");
+        let default : Nat32 = 0;
+        key := key # "/" #Nat32.toText(Option.get(nft_index, default)); //key = "token_canister_id" + "/" + "nft_index"
+        var e : EXTStake = {
+          staker = _of;
+          tokenIndex = Option.get(nft_index, default);
+          stakedAt = Time.now();
+        };
+        ext_stakes := Trie.put(ext_stakes, Utils.keyT(key), Text.equal, e).0;
       };
       case _ {};
     };
@@ -220,6 +233,30 @@ actor StakingHub {
     };
   };
 
+  //EXT tx verification checks
+  //1. Our StakingHubCanister owns the NFT
+  //2. NFT is not already staked by someone else in our NFT vault
+  private func query_ext_tx(collection_canister_id : Text, nft_index : Nat32, _from : Text, _to : Text) : async (Result.Result<Text, Text>) {
+    let EXT : Ledger.EXT = actor (collection_canister_id);
+    var _registry : [(Nat32, Text)] = await EXT.getRegistry();
+    for (i in _registry.vals()) {
+      if (i.0 == nft_index) {
+        if (_to != AccountIdentifier.fromText(_to, null)) {
+          return #err("we do not hold this NFT yet!");
+        };
+      };
+    };
+    var key : Text = collection_canister_id # "/" #Nat32.toText(nft_index);
+    switch (Trie.find(ext_stakes, Utils.keyT(key), Text.equal)) {
+      case (?stake) {
+        return #err("NFT already staked by : " #stake.staker);
+      };
+      case _ {
+        return #ok("verified!");
+      };
+    };
+  };
+
   //prevent spam ICP txs and perform action on successfull unique tx
   public shared (msg) func update_icp_stakes(height : Nat64, _to : Text, _from : Text, _amt : Nat64) : async (ICP.Response) {
     assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
@@ -251,7 +288,7 @@ actor StakingHub {
         icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
       };
       //update stakes of user who did the payment
-      update_stakes(Principal.toText(msg.caller), _amt, "ICP", null);
+      _update_stakes(Principal.toText(msg.caller), _amt, "ICP", null, null);
       return #Success("successfull");
     } else {
       return #Err "invalid tx!";
@@ -293,16 +330,33 @@ actor StakingHub {
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(token_canister_id), Text.equal, _token_txs).0;
       };
 
-      update_stakes(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id);
+      _update_stakes(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id, null);
       return #Success("successfull");
     } else {
       return #Err "ledger query failed!";
     };
   };
 
+  //prevent spam ICRC-1 txs and perform action on successfull unique tx
+  public shared (msg) func update_ext_stakes(index : Nat32, _to : Text, _from : Text, collection_canister_id : Text) : async (ICP.Response) {
+    assert (Principal.fromText(_from) == msg.caller);
+    assert (Principal.fromText(_to) == Principal.fromText(ENV.stakinghub_canister_id));
+
+    switch (await query_ext_tx(collection_canister_id, index, _from, _to)) {
+      case (#ok _) {
+        _update_stakes(_from, 1, "EXT", ?collection_canister_id, ?index);
+        return #Success("successfull");
+      };
+      case (#err e) {
+        return #Err(e);
+      };
+    };
+  };
+
   public shared ({ caller }) func process_withdrawal(_type : Text) : async () {
     let delay = 86400000000000; //24hrs in nanoseconds
     //ICP withdrawal processing
+    let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
     for ((_to, _stakes) in Trie.iter(icp_stakes)) {
       let minimum_amount_to_withdraw : Nat64 = 100000000; //adjust it accordingly, here its 1 ICP
       if ((_stakes.stakedAt + delay <= Time.now()) and _stakes.amount >= minimum_amount_to_withdraw) {
@@ -319,7 +373,6 @@ actor StakingHub {
             e8s = amt;
           };
         };
-        let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
         var res : ICP.TransferResult = await ICP_Ledger.transfer(_req);
         let x : Nat64 = 0;
         icp_stakes := Trie.put(
@@ -366,6 +419,27 @@ actor StakingHub {
           ).0;
           icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_to), Text.equal, t).0;
         };
+      };
+    };
+
+    //EXT V2 NFT withdrawal processing
+    for ((_key, _stakes) in Trie.iter(ext_stakes)) {
+      if (_stakes.stakedAt + delay <= Time.now()) {
+        let path = Iter.toArray(Text.tokens(_key, #text("/")));
+        let collection_canister_id = path[0];
+        let index = Nat32.fromNat(Utils.textToNat(path[1]));
+
+        var _req : EXTCORE.TransferRequest = {
+          from = #principal(Principal.fromText(ENV.stakinghub_canister_id));
+          to = #principal(Principal.fromText(_stakes.staker));
+          token = EXTCORE.TokenIdentifier.fromText(collection_canister_id, index);
+          amount = 1;
+          memo = Text.encodeUtf8("");
+          notify = false;
+          subaccount = null;
+        };
+        let EXT : Ledger.EXT = actor (collection_canister_id);
+        var res : EXTCORE.TransferResponse = await EXT.transfer(_req);
       };
     };
   };
