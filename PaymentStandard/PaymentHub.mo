@@ -61,7 +61,7 @@ actor PaymentHub {
       };
       case ("ICRC") {
         var _tcid : Text = Option.get(token_canister_id, "");
-        switch (Trie.find(icrc_holdings, Utils.keyT(_gcid), Text.equal)) { 
+        switch (Trie.find(icrc_holdings, Utils.keyT(_gcid), Text.equal)) {
           case (?_trie) {
             switch (Trie.find(_trie, Utils.keyT(_tcid), Text.equal)) {
               case (?h) {
@@ -214,9 +214,9 @@ actor PaymentHub {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(token_canister_id), Text.equal)) {
         case (?_txs) {
-          _token_txs := _txs; 
-          switch (Trie.find(_txs, Utils.keyT(Nat.toText(index)), Text.equal)){
-            case (?tx){
+          _token_txs := _txs;
+          switch (Trie.find(_txs, Utils.keyT(Nat.toText(index)), Text.equal)) {
+            case (?tx) {
               return #Err("old tx index for ICRC-1 Token : " #token_canister_id);
             };
             case _ {};
@@ -244,6 +244,92 @@ actor PaymentHub {
       return #Success("successfull");
     } else {
       return #Err "ledger query failed!";
+    };
+  };
+
+  // Endpoints for withdrawal of ICP/ICRC-1
+  // Invoke this endpoint from the Game Canister whoever wants to withdraw its holdings
+  public shared ({ caller }) func withdraw_icp() : async (Result.Result<ICP.TransferResult, { #TxErr : ICP.TransferError; #Err : Text }>) {
+    let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
+    let _to : Text = Principal.toText(caller);
+    switch (Trie.find(icp_holdings, Utils.keyT(_to), Text.equal)) {
+      case (?h) {
+        var amt : Nat64 = h - 10000; //deducting fees from holdings for ICP for Tx fees, you can change it accordingly
+        var _req : ICP.TransferArgs = {
+          to = Hex.decode(AccountIdentifier.fromText(_to, null));
+          fee = {
+            e8s = 10000;
+          };
+          memo = 0;
+          from_subaccount = null;
+          created_at_time = null;
+          amount = {
+            e8s = amt;
+          };
+        };
+        var res : ICP.TransferResult = await ICP_Ledger.transfer(_req);
+        switch (res) {
+          case (#Ok height) {
+            icp_holdings := Trie.remove(icp_holdings, Utils.keyT(_to), Text.equal).0;
+            return #ok(res);
+          };
+          case (#Err e) {
+            let err : { #TxErr : ICP.TransferError; #Err : Text } = #TxErr e;
+            return #err(err);
+          };
+        };
+      };
+      case _ {
+        let err : { #TxErr : ICP.TransferError; #Err : Text } = #Err "does not hold any ICP in our PaymentHub";
+        return #err(err);
+      };
+    };
+  };
+
+  public shared ({ caller }) func withdraw_icrc(token_canister_id : Text) : async (Result.Result<ICRC1.Result, { #TxErr : ICRC1.TransferError; #Err : Text }>) {
+    let ICRC1_Ledger : Ledger.ICRC1 = actor (token_canister_id);
+    let _to : Text = Principal.toText(caller);
+    switch (Trie.find(icrc_holdings, Utils.keyT(_to), Text.equal)) {
+      case (?_trie) {
+        switch (Trie.find(_trie, Utils.keyT(token_canister_id), Text.equal)) {
+          case (?h) {
+            var amt : Nat = h - 10; //deducting fees from user stakes for ckBTC Tx fees, you can change it accordingly for different ICRC-1 Tokens
+            var _req : ICRC1.TransferArg = {
+              to = {
+                owner = Principal.fromText(_to);
+                subaccount = null;
+              };
+              fee = null;
+              memo = null;
+              from_subaccount = null;
+              created_at_time = null;
+              amount = amt;
+            };
+            var res : ICRC1.Result = await ICRC1_Ledger.icrc1_transfer(_req);
+            switch (res) {
+              case (#Ok index) {
+                var t : Trie.Trie<Text, Nat> = _trie;
+                t := Trie.remove(t, Utils.keyT(token_canister_id), Text.equal).0;
+                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(_to), Text.equal, t).0;
+                return #ok(res);
+              };
+              case (#Err e) {
+                let err : { #TxErr : ICRC1.TransferError; #Err : Text } = #TxErr e;
+                return #err(err);
+              };
+            };
+            return #ok(res);
+          };
+          case _ {
+            let err : { #TxErr : ICRC1.TransferError; #Err : Text } = #Err("does not hold ICRC-1 tokens of : " #token_canister_id # " canister");
+            return #err(err);
+          };
+        };
+      };
+      case _ {
+        let err : { #TxErr : ICRC1.TransferError; #Err : Text } = #Err "does not hold any ICRC-1 tokens in our PaymentHub";
+        #err(err);
+      };
     };
   };
 
