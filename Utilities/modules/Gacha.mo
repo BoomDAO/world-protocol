@@ -7,7 +7,7 @@ import Char "mo:base/Char";
 import Float "mo:base/Float";
 import Option "mo:base/Option";
 
-import Users "../Types";
+import Users "../types/database.types";
 import JSON "../utils/Json";
 import RandomUtil "../utils/RandomUtil";
 import Utils "../utils/Utils";
@@ -19,7 +19,7 @@ module Gacha {
         quantity : Float; // if > 0 is add and if < 0 is subs
     };
 
-    public func gen_gacha_variables(gacha_id : Text, gachas_json : Text) : async (Result.Result<[RewardData], Text>) {
+    public func genGachaVariables(gacha_id : Text, gachas_json : Text) : async (Result.Result<[RewardData], Text>) {
         var rolls_text = "";
         switch (JSON.find_arr_element_by_itemId(gacha_id, "gachas", gachas_json)) {
             case (#ok(k)) {
