@@ -29,34 +29,23 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import JSON "../Utilities/utils/Json";
-import Parser "../Utilities/utils/Parser";
-import Types "../Utilities/types/database.types";
-import Utils "../Utilities/utils/Utils";
-import ENV "../Utilities/utils/Env";
+import JSON "../utils/Json";
+import Parser "../utils/Parser";
+import Types "../types/database.types";
+import Utils "../utils/Utils";
+import ENV "../utils/Env";
 
 actor class Users() {
   //stable memory for DB
   private stable var _usersGame : Trie.Trie<Text, Trie.Trie<Text, Types.GameData>> = Trie.empty();
   private stable var _usersCore : Trie.Trie<Text, Types.CoreData> = Trie.empty();
-  private stable var _games : [Text] = [];
 
   //Internal functions
   //
-  //validating Game Canister as caller
-  private func isGame_(_p : Principal) : (Bool) {
-    var p : Text = Principal.toText(_p);
-    for (i in _games.vals()) {
-      if (p == i) {
-        return true;
-      };
-    };
-    return false;
-  };
   //validating Core Canister as caller
-  private func isCore_(p : Principal) : (Bool) {
+  private func isDatabaseHub_(p : Principal) : (Bool) {
     let _p : Text = Principal.toText(p);
-    if (_p == ENV.core) {
+    if (_p == ENV.DatabaseHub) {
       return true;
     };
     return false;
@@ -105,7 +94,7 @@ actor class Users() {
                         case (?item) {
                           var new_item : Types.Item = {
                             id = item.id;
-                            quantity = item.quantity - i.quantity; //prev_val + new_val
+                            quantity = item.quantity - i.quantity; //prev_val - new_val
                           };
                           items := Trie.put(items, Utils.keyT(item.id), Text.equal, new_item).0;
                         };
@@ -132,8 +121,7 @@ actor class Users() {
                           var new_ach : Types.Achievement = {
                             id = ach.id;
                             quantity = ach.quantity + i.quantity; //prev_val + new_val
-                            firstTs = ach.firstTs;
-                            endTs = Time.now();
+                            ts = Time.now();
                           };
                           achievements := Trie.put(achievements, Utils.keyT(ach.id), Text.equal, new_ach).0;
                         };
@@ -141,8 +129,7 @@ actor class Users() {
                           var new_ach : Types.Achievement = {
                             id = i.id;
                             quantity = i.quantity;
-                            firstTs = Time.now();
-                            endTs = Time.now();
+                            ts = Time.now();
                           };
                           achievements := Trie.put(achievements, Utils.keyT(i.id), Text.equal, new_ach).0;
                         };
@@ -160,9 +147,8 @@ actor class Users() {
                         case (?ach) {
                           var new_ach : Types.Achievement = {
                             id = ach.id;
-                            quantity = ach.quantity - i.quantity; //prev_val + new_val
-                            firstTs = ach.firstTs;
-                            endTs = Time.now();
+                            quantity = ach.quantity - i.quantity; //prev_val - new_val
+                            ts = Time.now();
                           };
                           achievements := Trie.put(achievements, Utils.keyT(ach.id), Text.equal, new_ach).0;
                         };
@@ -186,20 +172,18 @@ actor class Users() {
                     for (i in _buffs.vals()) {
                       switch (Trie.find(nbuffs, Utils.keyT(i.id), Text.equal)) {
                         case (?buff) {
-                          if (buff.usage == i.usage) {
-                            var new_buff : Types.Buff = {
-                              id = buff.id;
-                              usage = buff.usage;
-                              endTs = Time.now();
-                            };
-                            nbuffs := Trie.put(nbuffs, Utils.keyT(i.id), Text.equal, new_buff).0;
+                          var new_buff : Types.Buff = {
+                            id = buff.id;
+                            quantity = buff.quantity + i.quantity;
+                            ts = Time.now();
                           };
+                          nbuffs := Trie.put(nbuffs, Utils.keyT(i.id), Text.equal, new_buff).0;
                         };
                         case _ {
                           var new_buff : Types.Buff = {
                             id = i.id;
-                            usage = i.usage;
-                            endTs = Time.now();
+                            quantity = i.quantity;
+                            ts = Time.now();
                           };
                           nbuffs := Trie.put(nbuffs, Utils.keyT(i.id), Text.equal, new_buff).0;
                         };
@@ -215,9 +199,12 @@ actor class Users() {
                     for (i in _buffs.vals()) {
                       switch (Trie.find(nbuffs, Utils.keyT(i.id), Text.equal)) {
                         case (?buff) {
-                          if (buff.usage == i.usage) {
-                            nbuffs := Trie.remove(nbuffs, Utils.keyT(buff.id), Text.equal).0;
+                          var new_buff : Types.Buff = {
+                            id = buff.id;
+                            quantity = buff.quantity - i.quantity;
+                            ts = Time.now();
                           };
+                          nbuffs := Trie.put(nbuffs, Utils.keyT(i.id), Text.equal, new_buff).0;
                         };
                         case _ {};
                       };
@@ -351,20 +338,19 @@ actor class Users() {
   //Execute Transaction
   //
   public shared ({ caller }) func executeGameTx(_uid : Text, t : Types.GameTxData) : async () {
-    assert (isGame_(caller)); //only game canister can update GameData of user
     var _gid : Text = Principal.toText(caller);
     await executeGameTx_(_uid, _gid, t);
   };
 
   public shared ({ caller }) func executeCoreTx(_uid : Text, t : Types.CoreTxData) : async () {
-    assert (isCore_(caller)); //only core canister can update CoreData of user
+    assert (isDatabaseHub_(caller)); //only core canister can update CoreData of user
     await executeCoreTx_(_uid, t);
   };
 
   //Profile update
   //
   public shared ({ caller }) func setUsername(_uid : Text, _name : Text) : async (Text) {
-    assert (isCore_(caller));
+    assert (isDatabaseHub_(caller));
     switch (Trie.find(_usersCore, Utils.keyT(_uid), Text.equal)) {
       case (?d) {
         var cd : Types.CoreData = {
@@ -388,7 +374,7 @@ actor class Users() {
   //CRUD
   //
   public shared ({ caller }) func adminCreateUser(_uid : Text) : async () {
-    assert (isCore_(caller));
+    assert (isDatabaseHub_(caller));
     var cd : Types.CoreData = {
       profile = {
         name = "";
@@ -494,24 +480,6 @@ actor class Users() {
         return #err("user not found");
       };
     };
-  };
-
-  //update new Games canister_ids for validation
-  public shared ({ caller }) func addGame(g : Text) : async () {
-    assert (isCore_(caller));
-    var b : Buffer.Buffer<Text> = Buffer.fromArray(_games);
-    b.add(g);
-    _games := Buffer.toArray(b);
-  };
-  public shared ({ caller }) func removeGame(g : Text) : async () {
-    assert (isCore_(caller));
-    var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
-    for (i in _games.vals()) {
-      if (i != g) {
-        b.add(i);
-      };
-    };
-    _games := Buffer.toArray(b);
   };
 
   //filters

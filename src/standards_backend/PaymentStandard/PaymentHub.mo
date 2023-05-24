@@ -29,15 +29,15 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import JSON "../Utilities/utils/Json";
-import AccountIdentifier "../Utilities/utils/AccountIdentifier";
-import Core "../Utilities/utils/Core";
-import Hex "../Utilities/utils/Hex";
-import ICP "../Utilities/types/icp.types";
-import ICRC1 "../Utilities/types/icrc.types";
-import ENV "../Utilities/utils/Env";
-import Ledger "../Utilities/modules/Ledgers";
-import Utils "../Utilities/utils/Utils";
+import JSON "../utils/Json";
+import AccountIdentifier "../utils/AccountIdentifier";
+import Core "../utils/Core";
+import Hex "../utils/Hex";
+import ICP "../types/icp.types";
+import ICRC1 "../types/icrc.types";
+import ENV "../utils/Env";
+import Ledger "../modules/Ledgers";
+import Utils "../utils/Utils";
 
 actor PaymentHub {
 
@@ -175,7 +175,6 @@ actor PaymentHub {
 
   //prevent spam ICP txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcp(height : Nat64, _to : Text, _from : Text, _amt : Nat64) : async (ICP.Response) {
-    assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
     assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
     var amt_ : ICP.Tokens = {
       e8s = _amt;

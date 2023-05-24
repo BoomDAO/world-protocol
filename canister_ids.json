@@ -1,0 +1,13 @@
+{
+    "PaymentHub": {
+        "ic": "5hr3g-hqaaa-aaaap-abbxa-cai"
+    },
+    "StakingHub": {
+        "ic": "4p3dm-lyaaa-aaaal-qb4da-cai"
+    },
+    "DatabaseHub": {
+        "dev": "c4mme-3qaaa-aaaag-abiia-cai",
+        "ic": "wu4mm-cyaaa-aaaak-aelwq-cai",
+        "staging": "fgpem-ziaaa-aaaag-abi2q-cai"
+    }
+}

@@ -30,18 +30,18 @@ import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
 import Users "./DatabaseNode";
-import TUsers "../Utilities/types/database.types";
-import JSON "../Utilities/utils/Json";
-import Parser "../Utilities/utils/Parser";
-import ENV "../Utilities/utils/Env";
-import Utils "../Utilities/utils/Utils";
-import AccountIdentifier "../Utilities/utils/AccountIdentifier";
-import Hex "../Utilities/utils/Hex";
-import EXTCORE "../Utilities/utils/Core";
-import EXT "../Utilities/types/ext.types";
-import Gacha "../Utilities/modules/Gacha";
-import Configs "../Utilities/modules/Configs";
-import Management "../Utilities/modules/Management";
+import TUsers "../types/database.types";
+import JSON "../utils/Json";
+import Parser "../utils/Parser";
+import ENV "../utils/Env";
+import Utils "../utils/Utils";
+import AccountIdentifier "../utils/AccountIdentifier";
+import Hex "../utils/Hex";
+import EXTCORE "../utils/Core";
+import EXT "../types/ext.types";
+import Gacha "../modules/Gacha";
+import Configs "../modules/Configs";
+import Management "../modules/Management";
 
 actor Core {
     //stable memory
@@ -181,9 +181,9 @@ actor Core {
                     _uids := Trie.put(_uids, Utils.keyT(_uid), Text.equal, canister_id).0;
                 };
                 let db = actor (canister_id) : actor {
-                    adminCreateUser : shared (Text) -> async ();
+                    admin_create_user : shared (Text) -> async ();
                 };
-                await db.adminCreateUser(Principal.toText(caller));
+                await db.admin_create_user(Principal.toText(caller));
                 return #ok(canister_id);
             };
         };
@@ -207,7 +207,7 @@ actor Core {
     };
 
     //admin only endpoints
-    public shared ({ caller }) func adminExecuteGameTx(_uid : Text, _gid : Text, t : TUsers.GameTxData) : async (Result.Result<Text, Text>) {
+    public shared ({ caller }) func admin_executeGameTx(_uid : Text, _gid : Text, t : TUsers.GameTxData) : async (Result.Result<Text, Text>) {
         assert (isAdmin_(caller)); //only admin can update GameData of user
         switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
             case (?canister_id) {
@@ -223,7 +223,7 @@ actor Core {
         };
     };
 
-    public shared ({ caller }) func adminExecuteCoreTx(_uid : Text, t : TUsers.CoreTxData) : async (Result.Result<Text, Text>) {
+    public shared ({ caller }) func admin_executeCoreTx(_uid : Text, t : TUsers.CoreTxData) : async (Result.Result<Text, Text>) {
         assert (isAdmin_(caller)); //only admin can update GameData of user
         switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
             case (?canister_id) {
@@ -239,7 +239,7 @@ actor Core {
         };
     };
 
-    public shared ({ caller }) func adminCreateUser(_uid : Text) : async (Result.Result<Text, Text>) {
+    public shared ({ caller }) func admin_create_user(_uid : Text) : async (Result.Result<Text, Text>) {
         assert (isAdmin_(caller));
         switch (await getUserCanisterId(_uid)) {
             case (#ok o) {
@@ -261,15 +261,15 @@ actor Core {
                     _uids := Trie.put(_uids, Utils.keyT(_uid), Text.equal, canister_id).0;
                 };
                 let db = actor (canister_id) : actor {
-                    adminCreateUser : shared (Text) -> async ();
+                    admin_create_user : shared (Text) -> async ();
                 };
-                await db.adminCreateUser(_uid);
+                await db.admin_create_user(_uid);
                 return #ok(canister_id);
             };
         };
     };
 
-    public shared ({ caller }) func adminDeleteUser(uid : Text) : async () {
+    public shared ({ caller }) func admin_delete_user(uid : Text) : async () {
         assert (isAdmin_(caller));
         _uids := Trie.remove(_uids, Utils.keyT(uid), Text.equal).0;
         return ();

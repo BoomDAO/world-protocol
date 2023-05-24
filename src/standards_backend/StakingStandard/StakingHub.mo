@@ -26,19 +26,19 @@ import Principal "mo:base/Principal";
 import Result "mo:base/Result";
 import Text "mo:base/Text";
 import Time "mo:base/Time";
-import Trie "mo:base/Trie";
 import Timer "mo:base/Timer";
+import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import JSON "../Utilities/utils/Json";
-import AccountIdentifier "../Utilities/utils/AccountIdentifier";
-import EXTCORE "../Utilities/utils/Core";
-import Hex "../Utilities/utils/Hex";
-import ICP "../Utilities/types/icp.types";
-import ICRC1 "../Utilities/types/icrc.types";
-import ENV "../Utilities/utils/Env";
-import Ledger "../Utilities/modules/Ledgers";
-import Utils "../Utilities/utils/Utils";
+import JSON "../utils/Json";
+import AccountIdentifier "../utils/AccountIdentifier";
+import EXTCORE "../utils/Core";
+import Hex "../utils/Hex";
+import ICP "../types/icp.types";
+import ICRC1 "../types/icrc.types";
+import ENV "../utils/Env";
+import Ledger "../modules/Ledgers";
+import Utils "../utils/Utils";
 
 //Note : This configuration of StakingHub canister is only for 24hr staking period and is experimental, may get changed in future
 actor StakingHub {

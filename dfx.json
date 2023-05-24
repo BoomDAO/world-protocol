@@ -1,0 +1,24 @@
+{
+  "canisters": {
+    "PaymentHub": {
+      "main": "src/standards_backend/PaymentStandard/PaymentHub.mo",
+      "type": "motoko"
+    },
+    "StakingHub": {
+      "main": "src/standards_backend/StakingStandard/StakingHub.mo",
+      "type": "motoko"
+    },
+    "DatabaseHub": {
+      "main": "src/standards_backend/DatabaseStandard/DatabaseHub.mo",
+      "type": "motoko"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
