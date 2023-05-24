@@ -45,7 +45,7 @@ actor class Users() {
   //validating Core Canister as caller
   private func isDatabaseHub_(p : Principal) : (Bool) {
     let _p : Text = Principal.toText(p);
-    if (_p == ENV.DatabaseHub) {
+    if (_p == ENV.databaseHub_canister_id) {
       return true;
     };
     return false;
