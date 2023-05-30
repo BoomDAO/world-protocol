@@ -238,7 +238,7 @@ actor StakingHub {
           if (tt.from == from_ and tt.to == to_ and tt.amount == _amt) {
             return #ok("verified!");
           } else {
-            return #err("tx transfer details mismatch!");
+            return #err("tx transfer details mismatch! "#Principal.toText(tt.from.owner)#" ||| "#Principal.toText(from_.owner)#" ||| "#Principal.toText(tt.to.owner)#" ||| "#Principal.toText(to_.owner)#" ||| "#Nat.toText(tt.amount)#" ||| "#Nat.toText(_amt));
           };
         };
         case (null) {
@@ -425,7 +425,7 @@ actor StakingHub {
       updateStakes_(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id, null);
       return #Success("successfull");
     } else {
-      return #Err "ledger query failed!";
+      return #Err ("ledger query failed! " #(switch(res){case(#ok(result)){result};case(#err(result)){result}}));
     };
   };
 

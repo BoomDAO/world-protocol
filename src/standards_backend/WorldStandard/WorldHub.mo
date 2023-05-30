@@ -29,8 +29,8 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import Users "./DatabaseNode";
-import TUsers "../types/database.types";
+import WorldNode "./WorldNode";
+import Types "../types/world.types";
 import JSON "../utils/Json";
 import Parser "../utils/Parser";
 import ENV "../utils/Env";
@@ -43,21 +43,21 @@ import Gacha "../modules/Gacha";
 import Configs "../modules/Configs";
 import Management "../modules/Management";
 
-actor Core {
+actor WorldHub {
     //stable memory
-    private stable var _uids : Trie.Trie<Text, Text> = Trie.empty(); //mapping user_id -> canister_id
-    private stable var _usernames : Trie.Trie<Text, Text> = Trie.empty(); //mapping username -> _uid
-    private stable var _ucanisters : [Text] = []; //all user db canisters
+    private stable var _uids : Trie.Trie<Types.userId, Types.nodeId> = Trie.empty(); //mapping user_id -> node_canister_id
+    private stable var _usernames : Trie.Trie<Text, Types.userId> = Trie.empty(); //mapping username -> _uid
+    private stable var _nodes : [Types.nodeId] = []; //all user db canisters as nodes
     private stable var _admins : [Text] = ENV.admins; //admins for user db
 
     private stable var remote_configs : Trie.Trie<Text, JSON.JSON> = Trie.empty();
-    private var _configs = Configs.Configs(remote_configs); 
+    private var _configs = Configs.Configs(remote_configs);
 
     //Internals Functions
-    private func countUsers_(can_id : Text) : (Nat32) {
+    private func countUsers_(nid : Text) : (Nat32) {
         var count : Nat32 = 0;
         for ((uid, canister) in Trie.iter(_uids)) {
-            if (canister == can_id) {
+            if (canister == nid) {
                 count := count + 1;
             };
         };
@@ -95,7 +95,7 @@ actor Core {
 
     private func createCanister_() : async (Text) {
         Cycles.add(2000000000000);
-        let canister = await Users.Users();
+        let canister = await WorldNode.WorldNode();
         let _ = await updateCanister_(canister); // update canister permissions and settings
         let canister_id = Principal.fromActor(canister);
         return Principal.toText(canister_id);
@@ -132,12 +132,23 @@ actor Core {
         };
     };
 
-    public query func getAllUcanisters() : async [Text] {
-        return _ucanisters;
+    public query func getAllNodeIds() : async [Text] {
+        return _nodes;
     };
 
     public query func getAllAdmins() : async [Text] {
         return _admins;
+    };
+
+    public query func checkUsernameAvailability(_u : Text) : async (Bool) {
+        switch (Trie.find(_usernames, Utils.keyT(_u), Text.equal)) {
+            case (?t) {
+                return false;
+            };
+            case _ {
+                return true;
+            };
+        };
     };
 
     //Updates
@@ -167,7 +178,7 @@ actor Core {
             };
             case (#err e) {
                 var canister_id : Text = "";
-                label _check for (can_id in _ucanisters.vals()) {
+                label _check for (can_id in _nodes.vals()) {
                     var size : Nat32 = countUsers_(can_id);
                     if (size < 1000) {
                         canister_id := can_id;
@@ -177,13 +188,13 @@ actor Core {
                 };
                 if (canister_id == "") {
                     canister_id := await createCanister_();
-                    _ucanisters := addText_(_ucanisters, canister_id);
+                    _nodes := addText_(_nodes, canister_id);
                     _uids := Trie.put(_uids, Utils.keyT(_uid), Text.equal, canister_id).0;
                 };
-                let db = actor (canister_id) : actor {
-                    admin_create_user : shared (Text) -> async ();
+                let node = actor (canister_id) : actor {
+                    adminCreateUser : shared (Text) -> async ();
                 };
-                await db.admin_create_user(Principal.toText(caller));
+                await node.adminCreateUser(Principal.toText(caller));
                 return #ok(canister_id);
             };
         };
@@ -206,39 +217,8 @@ actor Core {
         await _configs.deleteConfig(name);
     };
 
-    //admin only endpoints
-    public shared ({ caller }) func admin_executeGameTx(_uid : Text, _gid : Text, t : TUsers.GameTxData) : async (Result.Result<Text, Text>) {
-        assert (isAdmin_(caller)); //only admin can update GameData of user
-        switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
-            case (?canister_id) {
-                let db = actor (canister_id) : actor {
-                    executeGameTx : shared (Text, Text, TUsers.GameTxData) -> async ();
-                };
-                await db.executeGameTx(_uid, _gid, t);
-                return #ok("executed");
-            };
-            case _ {
-                return #err("user not found");
-            };
-        };
-    };
-
-    public shared ({ caller }) func admin_executeCoreTx(_uid : Text, t : TUsers.CoreTxData) : async (Result.Result<Text, Text>) {
-        assert (isAdmin_(caller)); //only admin can update GameData of user
-        switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
-            case (?canister_id) {
-                let db = actor (canister_id) : actor {
-                    executeCoreTx : shared (Text, TUsers.CoreTxData) -> async ();
-                };
-                await db.executeCoreTx(_uid, t);
-                return #ok("executed");
-            };
-            case _ {
-                return #err("user not found");
-            };
-        };
-    };
-
+    //admin endpoints
+    //
     public shared ({ caller }) func admin_create_user(_uid : Text) : async (Result.Result<Text, Text>) {
         assert (isAdmin_(caller));
         switch (await getUserCanisterId(_uid)) {
@@ -247,7 +227,7 @@ actor Core {
             };
             case (#err e) {
                 var canister_id : Text = "";
-                label _check for (can_id in _ucanisters.vals()) {
+                label _check for (can_id in _nodes.vals()) {
                     var size : Nat32 = countUsers_(can_id);
                     if (size < 1000) {
                         canister_id := can_id;
@@ -257,13 +237,13 @@ actor Core {
                 };
                 if (canister_id == "") {
                     canister_id := await createCanister_();
-                    _ucanisters := addText_(_ucanisters, canister_id);
+                    _nodes := addText_(_nodes, canister_id);
                     _uids := Trie.put(_uids, Utils.keyT(_uid), Text.equal, canister_id).0;
                 };
-                let db = actor (canister_id) : actor {
-                    admin_create_user : shared (Text) -> async ();
+                let node = actor (canister_id) : actor {
+                    adminCreateUser : shared (Text) -> async ();
                 };
-                await db.admin_create_user(_uid);
+                await node.adminCreateUser(_uid);
                 return #ok(canister_id);
             };
         };
@@ -275,61 +255,23 @@ actor Core {
         return ();
     };
 
-    //profile_data endpoints
-    public shared ({ caller }) func setProfileData(t : TUsers.Profile) : async (Text) {
-        var uid : Text = Principal.toText(caller);
-        var canister_id : Text = Option.get(Trie.find(_uids, Utils.keyT(uid), Text.equal), "");
-        let db = actor (canister_id) : actor {
-            executeCoreTx : shared (Text, TUsers.CoreTxData) -> async ();
-        };
-        var tx_data : TUsers.CoreTxData = {
-            profile = ?t;
-            items = null;
-            bought_offers = null;
-        };
-        await db.executeCoreTx(uid, tx_data);
-        return "updated";
-    };
-
-    public query func checkUsernameAvailability(_u : Text) : async (Bool) {
-        switch (Trie.find(_usernames, Utils.keyT(_u), Text.equal)) {
-            case (?t) {
-                return false;
-            };
-            case _ {
-                return true;
-            };
-        };
-    };
-
     public shared ({ caller }) func setUsername(_uid : Text, _name : Text) : async (Result.Result<Text, Text>) {
         if (_uid != Principal.toText(caller)) {
             return #err("caller not authorised");
         };
         switch (Trie.find(_usernames, Utils.keyT(_name), Text.equal)) {
             case (?u) {
-                return #err("username already exist");
+                return #err("username already exist, try something else!");
             };
-            case _ {};
-        };
-        var canister_id : Text = "";
-        switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
-            case (?c) {
-                canister_id := c;
+            case _ {
+                for ((i, v) in Trie.iter(_usernames)) {
+                    if (v == _uid) {
+                        _usernames := Trie.remove(_usernames, Utils.keyT(i), Text.equal).0;
+                    };
+                };
+                _usernames := Trie.put(_usernames, Utils.keyT(_name), Text.equal, _uid).0;
+                return #ok("updated!");
             };
-            case _ {};
-        };
-        if (canister_id == "") {
-            return #err("user not exist");
-        };
-        let db = actor (canister_id) : actor {
-            _setUsername : shared (Text, Text) -> async (Text);
-        };
-        var res : Text = await db._setUsername(_uid, _name);
-        if (res == "updated") {
-            return #ok(res);
-        } else {
-            return #err(res);
         };
     };
 

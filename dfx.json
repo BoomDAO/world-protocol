@@ -8,8 +8,8 @@
       "main": "src/standards_backend/StakingStandard/StakingHub.mo",
       "type": "motoko"
     },
-    "DatabaseHub": {
-      "main": "src/standards_backend/DatabaseStandard/DatabaseHub.mo",
+    "WorldHub": {
+      "main": "src/standards_backend/WorldStandard/WorldHub.mo",
       "type": "motoko"
     }
   },
@@ -17,6 +17,16 @@
     "build": {
       "args": "",
       "packtool": ""
+    }
+  },
+  "networks": {
+    "staging": {
+      "providers": ["https://ic0.app"],
+      "type": "persistent"
+    },
+    "dev": {
+      "providers": ["https://ic0.app"],
+      "type": "persistent"
     }
   },
   "output_env_file": ".env",
