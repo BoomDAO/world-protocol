@@ -265,8 +265,7 @@ actor WorldHub {
 
     // WorldHub endpoints
     //
-    public shared ({ caller }) func transactEntities(uid : Types.userId, tx : Types.TxData) : async (Result.Result<Text, Text>) {
-        var gid : Text = Principal.toText(caller);
+    public shared ({ caller }) func transactEntities(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : async (Result.Result<Text, Text>) {
         var canister_id : Text = "";
         switch (await getWorldNodeCanisterId(uid)) {
             case (#ok o) {
@@ -282,8 +281,7 @@ actor WorldHub {
         return (await node.transactEntities(uid, gid, tx));
     };
 
-    public shared ({ caller }) func updateEntities(uid : Types.userId, tx : [Types.Entity]) : async (Result.Result<Text, Text>) {
-        var gid : Text = Principal.toText(caller);
+    public shared ({ caller }) func updateEntities(uid : Types.userId, gid : Types.gameId, tx : [Types.Entity]) : async (Result.Result<Text, Text>) {
         var canister_id : Text = "";
         switch (await getWorldNodeCanisterId(uid)) {
             case (#ok o) {
