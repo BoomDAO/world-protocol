@@ -62,6 +62,10 @@ module {
         increment : ?[Entity];
         decrement : ?[Entity];
     };
+    public type EntityPermission = {
+        incrementDailyCap: ?Nat;
+        decrementDailyCap: ?Nat;
+    };
 
     public type Nft = {
         id : Text;

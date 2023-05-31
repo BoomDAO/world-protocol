@@ -49,6 +49,7 @@ actor WorldHub {
     private stable var _usernames : Trie.Trie<Text, Types.userId> = Trie.empty(); //mapping username -> _uid
     private stable var _nodes : [Types.nodeId] = []; //all user db canisters as nodes
     private stable var _admins : [Text] = ENV.admins; //admins for user db
+    private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "GameCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
 
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
@@ -106,6 +107,15 @@ actor WorldHub {
             };
         };
         return false;
+    };
+
+    private func updateAllNodePermissions_(canister_id : Text) : async () {
+        for ((_key, _permission) in Trie.iter(_permissions)) {
+            let node = actor (canister_id) : actor {
+                updateNodePermissions : shared (Text, Trie.Trie<Text, Types.EntityPermission>) -> async ();
+            };
+            await node.updateNodePermissions(_key, _permission);
+        };
     };
 
     //Queries
@@ -200,6 +210,7 @@ actor WorldHub {
                     adminCreateUser : shared (Text) -> async ();
                 };
                 await node.adminCreateUser(Principal.toText(caller));
+                await updateAllNodePermissions_(canister_id);
                 return #ok(canister_id);
             };
         };
@@ -232,6 +243,7 @@ actor WorldHub {
                     adminCreateUser : shared (Text) -> async ();
                 };
                 await node.adminCreateUser(_uid);
+                await updateAllNodePermissions_(canister_id);
                 return #ok(canister_id);
             };
         };
@@ -263,38 +275,35 @@ actor WorldHub {
         };
     };
 
-    // WorldHub endpoints
+    //Game Canister Permission Rules
     //
-    public shared ({ caller }) func transactEntities(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : async (Result.Result<Text, Text>) {
-        var canister_id : Text = "";
-        switch (await getWorldNodeCanisterId(uid)) {
-            case (#ok o) {
-                canister_id := o;
+    public shared ({ caller }) func addEntityPermission(entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
+        let gameId = Principal.toText(caller);
+        let k = gameId # "+" #entityId;
+        _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
+        for (i in _nodes.vals()) {
+            let node = actor (i) : actor {
+                addEntityPermission : shared (Text, Text, Text, Types.EntityPermission) -> async ();
             };
-            case (#err e) {
-                return #err(e);
-            };
+            await node.addEntityPermission(gameId, entityId, principal, permission);
         };
-        let node = actor (canister_id) : actor {
-            transactEntities : shared (Text, Text, Types.TxData) -> async (Result.Result<Text, Text>);
-        };
-        return (await node.transactEntities(uid, gid, tx));
     };
 
-    public shared ({ caller }) func updateEntities(uid : Types.userId, gid : Types.gameId, tx : [Types.Entity]) : async (Result.Result<Text, Text>) {
-        var canister_id : Text = "";
-        switch (await getWorldNodeCanisterId(uid)) {
-            case (#ok o) {
-                canister_id := o;
+    public shared ({ caller }) func removeEntityPermission(entityId : Text, principal : Text) : async () {
+        let gameId = Principal.toText(caller);
+        let k = gameId # "+" #entityId;
+        switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
+            case (?p) {
+                _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;
             };
-            case (#err e) {
-                return #err(e);
+            case _ {};
+        };
+        for (i in _nodes.vals()) {
+            let node = actor (i) : actor {
+                removeEntityPermission : shared (Text, Text, Text) -> async ();
             };
+            await node.removeEntityPermission(gameId, entityId, principal);
         };
-        let node = actor (canister_id) : actor {
-            updateEntities : shared (Text, Text, [Types.Entity]) -> async (Result.Result<Text, Text>);
-        };
-        return (await node.updateEntities(uid, gid, tx));
     };
 
 };
