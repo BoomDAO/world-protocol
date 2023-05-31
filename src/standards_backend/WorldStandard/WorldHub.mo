@@ -50,9 +50,6 @@ actor WorldHub {
     private stable var _nodes : [Types.nodeId] = []; //all user db canisters as nodes
     private stable var _admins : [Text] = ENV.admins; //admins for user db
 
-    private stable var remote_configs : Trie.Trie<Text, JSON.JSON> = Trie.empty();
-    private var _configs = Configs.Configs(remote_configs);
-
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
         var count : Nat32 = 0;
@@ -121,7 +118,7 @@ actor WorldHub {
         return Trie.size(_uids);
     };
 
-    public query func getUserCanisterId(_uid : Text) : async (Result.Result<Text, Text>) {
+    public query func getWorldNodeCanisterId(_uid : Text) : async (Result.Result<Text, Text>) {
         switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
             case (?c) {
                 return #ok(c);
@@ -151,6 +148,14 @@ actor WorldHub {
         };
     };
 
+    public query func getTokenIdentifier(t : Text, i : EXT.TokenIndex) : async (EXT.TokenIdentifier) {
+        return EXTCORE.TokenIdentifier.fromText(t, i);
+    };
+
+    public query func getAccountIdentifier(p : Text) : async AccountIdentifier.AccountIdentifier {
+        return AccountIdentifier.fromText(p, null);
+    };
+
     //Updates
     public shared ({ caller }) func addAdmin(p : Text) : async () {
         assert (isAdmin_(caller));
@@ -172,7 +177,7 @@ actor WorldHub {
 
     public shared ({ caller }) func createNewUser() : async (Result.Result<Text, Text>) {
         var _uid : Text = Principal.toText(caller);
-        switch (await getUserCanisterId(_uid)) {
+        switch (await getWorldNodeCanisterId(_uid)) {
             case (#ok o) {
                 return #err("user already exist");
             };
@@ -200,28 +205,11 @@ actor WorldHub {
         };
     };
 
-    //Remote_Configs of Core Canister
-    public shared ({ caller }) func createConfig(name : Text, json : Text) : async (Result.Result<Text, Text>) {
-        await _configs.createConfig(name, json);
-    };
-
-    public shared ({ caller }) func getConfig(name : Text) : async (Text) {
-        await _configs.getConfig(name);
-    };
-
-    public shared ({ caller }) func updateConfig(name : Text, json : Text) : async (Result.Result<Text, Text>) {
-        await _configs.updateConfig(name, json);
-    };
-
-    public shared ({ caller }) func deleteConfig(name : Text) : async (Result.Result<Text, Text>) {
-        await _configs.deleteConfig(name);
-    };
-
     //admin endpoints
     //
     public shared ({ caller }) func admin_create_user(_uid : Text) : async (Result.Result<Text, Text>) {
         assert (isAdmin_(caller));
-        switch (await getUserCanisterId(_uid)) {
+        switch (await getWorldNodeCanisterId(_uid)) {
             case (#ok o) {
                 return #err("user already exist");
             };
@@ -273,6 +261,40 @@ actor WorldHub {
                 return #ok("updated!");
             };
         };
+    };
+
+    // WorldHub endpoints
+    //
+    public shared ({ caller }) func transactEntities(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : async (Result.Result<Text, Text>) {
+        var canister_id : Text = "";
+        switch (await getWorldNodeCanisterId(uid)) {
+            case (#ok o) {
+                canister_id := o;
+            };
+            case (#err e) {
+                return #err(e);
+            };
+        };
+        let node = actor (canister_id) : actor {
+            transactEntities : shared (Text, Text, Types.TxData) -> async (Result.Result<Text, Text>);
+        };
+        return (await node.transactEntities(uid, gid, tx));
+    };
+
+    public shared ({ caller }) func updateEntities(uid : Types.userId, gid : Types.gameId, tx : [Types.Entity]) : async (Result.Result<Text, Text>) {
+        var canister_id : Text = "";
+        switch (await getWorldNodeCanisterId(uid)) {
+            case (#ok o) {
+                canister_id := o;
+            };
+            case (#err e) {
+                return #err(e);
+            };
+        };
+        let node = actor (canister_id) : actor {
+            updateEntities : shared (Text, Text, [Types.Entity]) -> async (Result.Result<Text, Text>);
+        };
+        return (await node.updateEntities(uid, gid, tx));
     };
 
 };

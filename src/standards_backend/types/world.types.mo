@@ -59,8 +59,8 @@ module {
         timestamp : ?Int;
     };
     public type TxData = {
-        increament : ?[Entity];
-        decreament : ?[Entity];
+        increment : ?[Entity];
+        decrement : ?[Entity];
     };
 
     public type Nft = {

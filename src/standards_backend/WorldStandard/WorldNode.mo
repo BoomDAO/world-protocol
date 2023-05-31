@@ -51,11 +51,17 @@ actor class WorldNode() {
   };
 
   private func isTransactDataValid_(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : (Result.Result<Text, Text>) {
-    switch (tx.increament) {
+    switch (tx.increment) {
       case (?_entities) {
         for (i in _entities.vals()) {
-          switch (i.data) {
-            case (#item _ or #buff _ or #stats _) {};
+          switch (i.quantity) {
+            case (?q) {};
+            case _ {
+              return #err("some entities getting increamented are non-transactional!");
+            };
+          };
+          switch (i.timestamp) {
+            case (?t) {};
             case _ {
               return #err("some entities getting increamented are non-transactional!");
             };
@@ -64,11 +70,11 @@ actor class WorldNode() {
       };
       case _ {};
     };
-    switch (tx.decreament) {
+    switch (tx.decrement) {
       case (?_e) {
         for (i in _e.vals()) {
-          switch (i.data) {
-            case (#item _ or #buff _ or #stats _) {
+          switch (i.quantity) {
+            case (?quan) {
               switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
                 case (?u) {
                   switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
@@ -100,6 +106,39 @@ actor class WorldNode() {
               return #err("some entities getting increamented are non-transactional!");
             };
           };
+          switch (i.timestamp) {
+            case (?ts) {
+              switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
+                case (?u) {
+                  switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
+                    case (?e) {
+                      switch (Trie.find(e, Utils.keyT(i.id), Text.equal)) {
+                        case (?entity) {
+                          let q : Int = Option.get(i.timestamp, 0);
+                          let _q : Int = Option.get(entity.timestamp, 0);
+                          if (Int.less(_q, q)) {
+                            return #err("some entities are not sufficient to get decreamented!");
+                          };
+                        };
+                        case _ {
+                          return #err("some entities getting decreamented not found!");
+                        };
+                      };
+                    };
+                    case _ {
+                      return #err("user's props in this game does not found!");
+                    };
+                  };
+                };
+                case _ {
+                  return #err("user not found!");
+                };
+              };
+            };
+            case _ {
+              return #err("some entities getting increamented are non-transactional!");
+            };
+          };
         };
       };
       case _ {};
@@ -109,8 +148,16 @@ actor class WorldNode() {
 
   private func isUpdateDataValid_(uid : Types.userId, gid : Types.gameId, tx : [Types.Entity]) : (Result.Result<Text, Text>) {
     for (i in tx.vals()) {
-      switch (i.data) {
-        case (#purchases _ or #profile _) {
+      switch (i.quantity) {
+        case (null) {
+          return #ok("");
+        };
+        case _ {
+          return #err("some entities are not updatable!");
+        };
+      };
+      switch (i.timestamp) {
+        case (null) {
           return #ok("");
         };
         case _ {
@@ -122,7 +169,7 @@ actor class WorldNode() {
   };
 
   private func transactEntities_(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : (Result.Result<Text, Text>) {
-    switch (tx.increament) {
+    switch (tx.increment) {
       case (?_e) {
         for (i in _e.vals()) {
           switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
@@ -133,11 +180,13 @@ actor class WorldNode() {
                     case (?entity) {
                       let q : Float = Option.get(entity.quantity, 0.0);
                       let _q : Float = Option.get(i.quantity, 0.0);
+                      let ts : Int = Option.get(entity.timestamp, 0);
+                      let _ts : Int = Option.get(i.timestamp, 0);
                       let n_entity : Types.Entity = {
                         id = i.id;
                         data = i.data;
                         quantity = ?Float.add(q, _q);
-                        timestamp = ?Time.now();
+                        timestamp = ?Int.add(ts, _ts);
                       };
                       _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, n_entity);
                     };
@@ -146,7 +195,7 @@ actor class WorldNode() {
                         id = i.id;
                         data = i.data;
                         quantity = i.quantity;
-                        timestamp = ?Time.now();
+                        timestamp = i.timestamp;
                       };
                       _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, n_entity);
                     };
@@ -165,7 +214,7 @@ actor class WorldNode() {
       };
       case _ {};
     };
-    switch (tx.decreament) {
+    switch (tx.decrement) {
       case (?_e) {
         for (i in _e.vals()) {
           switch (i.data) {
@@ -178,11 +227,13 @@ actor class WorldNode() {
                         case (?entity) {
                           let q : Float = Option.get(entity.quantity, 0.0);
                           let _q : Float = Option.get(i.quantity, 0.0);
+                          let ts : Int = Option.get(entity.timestamp, 0);
+                          let _ts : Int = Option.get(i.timestamp, 0);
                           let n_entity : Types.Entity = {
                             id = i.id;
                             data = i.data;
                             quantity = ?Float.sub(q, _q);
-                            timestamp = ?Time.now();
+                            timestamp = ?Int.sub(ts, _ts);
                           };
                           _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, n_entity);
                         };
@@ -284,7 +335,7 @@ actor class WorldNode() {
             return #ok(Buffer.toArray(b));
           };
           case _ {
-            return #err("user does not hold any entity in this game!");
+            return #ok([]);
           };
         };
       };
