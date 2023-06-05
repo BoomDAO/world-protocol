@@ -128,10 +128,10 @@ actor class WorldNode() {
                         Utils.keyT(i.1),
                         Text.equal,
                         {
-                          eid = i.1;
-                          gid = i.0;
+                          eid = entity.eid;
+                          gid = entity.gid;
                           quantity = ?q;
-                          customData = null;
+                          customData = entity.customData;
                         },
                       );
                     };
@@ -202,10 +202,10 @@ actor class WorldNode() {
                         Utils.keyT(i.1),
                         Text.equal,
                         {
-                          eid = i.1;
-                          gid = i.0;
+                          eid = entity.eid;
+                          gid = entity.gid;
                           quantity = ?q;
-                          customData = null;
+                          customData = entity.customData;
                         },
                       );
                     };
@@ -233,21 +233,49 @@ actor class WorldNode() {
         for (i in d.vals()) {
           switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
             case (?g) {
-              _entities := Trie.put3D(
-                _entities,
-                Utils.keyT(uid),
-                Text.equal,
-                Utils.keyT(i.0),
-                Text.equal,
-                Utils.keyT(i.1),
-                Text.equal,
-                {
-                  eid = i.1;
-                  gid = i.0;
-                  quantity = null;
-                  customData = ?(i.2);
-                },
-              );
+              switch (Trie.find(g, Utils.keyT(i.0), Text.equal)) {
+                case (?e) {
+                  switch (Trie.find(e, Utils.keyT(i.1), Text.equal)) {
+                    case (?entity) {
+                      _entities := Trie.put3D(
+                        _entities,
+                        Utils.keyT(uid),
+                        Text.equal,
+                        Utils.keyT(i.0),
+                        Text.equal,
+                        Utils.keyT(i.1),
+                        Text.equal,
+                        {
+                          eid = entity.eid;
+                          gid = entity.gid;
+                          quantity = entity.quantity;
+                          customData = ?(i.2);
+                        },
+                      );
+                    };
+                    case _ {
+                      _entities := Trie.put3D(
+                        _entities,
+                        Utils.keyT(uid),
+                        Text.equal,
+                        Utils.keyT(i.0),
+                        Text.equal,
+                        Utils.keyT(i.1),
+                        Text.equal,
+                        {
+                          eid = i.1;
+                          gid = i.0;
+                          quantity = null;
+                          customData = ?(i.2);
+                        },
+                      );
+                    };
+                  };
+                };
+                case _ {
+                  return #err(i.1 # " game-entity not found");
+                };
+              };
             };
             case _ {
               return #err("user not found");
@@ -295,19 +323,19 @@ actor class WorldNode() {
     };
 
     switch (isUpdateArgsValid_(uid, args)) {
-      case (#ok _){
-        switch(await updateEntities_(uid, args)){
-          case (#ok o){
+      case (#ok _) {
+        switch (await updateEntities_(uid, args)) {
+          case (#ok o) {
             return #ok(o);
           };
-          case (#err e){
+          case (#err e) {
             return #err(e);
           };
-        }
+        };
       };
-      case (#err e){
+      case (#err e) {
         return #err(e);
-      }
+      };
     };
   };
 
@@ -344,22 +372,26 @@ actor class WorldNode() {
     };
   };
 
-  public query func getUserGameEntity(uid : Types.userId, gid : Types.gameId, eid : Types.entityId) : async (Result.Result<Types.Entity, Text>) {
+  public query func getSpecificUserGameEntities(uid : Types.userId, gid : Types.gameId, eids : [Types.entityId]) : async (Result.Result<[Types.Entity], Text>) {
+    var b = Buffer.Buffer<Types.Entity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
         switch (Trie.find(g, Utils.keyT(gid), Text.equal)) {
           case (?e) {
-            switch (Trie.find(e, Utils.keyT(eid), Text.equal)) {
-              case (?entity) {
-                return #ok(entity);
-              };
-              case _ {
-                return #err("entity not found!");
+            for (eid in eids.vals()) {
+              switch (Trie.find(e, Utils.keyT(eid), Text.equal)) {
+                case (?entity) {
+                  b.add(entity);
+                };
+                case _ {
+                  return #err(eid # " entity not found!");
+                };
               };
             };
+            return #ok(Buffer.toArray(b));
           };
           case _ {
-            return #err("user does not hold any entity in this game!");
+            return #ok([]);
           };
         };
       };
