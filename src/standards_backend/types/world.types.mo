@@ -34,47 +34,31 @@ module {
     public type gameId = Text;
     public type userId = Text;
     public type nodeId = Text;
-    public type Item = {};
-    public type Buff = {};
-    public type Stats = {};
     public type Profile = {
         name : Text;
-        url : Text;
+        imageUrl : Text;
         avatarKey : Text;
     };
     public type Purchase = {
         offers : [Text];
     };
-    public type DataType = {
-        #item : Item;
-        #buff : Buff;
-        #stats : Stats;
+    public type CustomData = {
         #profile : Profile;
         #purchases : Purchase;
     };
     public type Entity = {
-        id : Text;
-        data : DataType;
+        eid : Text; // entity id
+        gid : Text; // game id
         quantity : ?Float;
-        timestamp : ?Int;
+        customData : ?CustomData;
     };
-    public type TxData = {
-        increment : ?[Entity];
-        decrement : ?[Entity];
+    public type UpdateArgs = {
+        incrementQuantity : ?[(gameId, entityId, Float)];
+        decrementQuantity : ?[(gameId, entityId, Float)];
+        setCustomData : ?[(gameId, entityId, CustomData)];
     };
     public type EntityPermission = {
         incrementDailyCap: ?Nat;
         decrementDailyCap: ?Nat;
     };
-
-    public type Nft = {
-        id : Text;
-        quantity : Float;
-        canister : Text;
-        assetId : Text;
-        collection : Text;
-        standard : Text;
-        metaData : Text;
-    };
-
 };

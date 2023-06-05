@@ -69,290 +69,245 @@ actor class WorldNode() {
     return false;
   };
 
-  private func isTransactDataValid_(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : (Result.Result<Text, Text>) {
-    switch (tx.increment) {
-      case (?_entities) {
-        for (i in _entities.vals()) {
-          switch (i.quantity) {
-            case (?q) {};
-            case _ {
-              return #err("some entities getting increamented are non-transactional!");
-            };
-          };
-          switch (i.timestamp) {
-            case (?t) {};
-            case _ {
-              return #err("some entities getting increamented are non-transactional!");
-            };
-          };
-        };
-      };
-      case _ {};
-    };
-    switch (tx.decrement) {
-      case (?_e) {
-        for (i in _e.vals()) {
-          switch (i.quantity) {
-            case (?quan) {
-              switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
-                case (?u) {
-                  switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
-                    case (?e) {
-                      switch (Trie.find(e, Utils.keyT(i.id), Text.equal)) {
-                        case (?entity) {
-                          let q : Float = Option.get(i.quantity, 0.0);
-                          let _q : Float = Option.get(entity.quantity, 0.0);
-                          if (Float.less(_q, q)) {
-                            return #err("some entities are not sufficient to get decreamented!");
-                          };
-                        };
-                        case _ {
-                          return #err("some entities getting decreamented not found!");
-                        };
-                      };
-                    };
-                    case _ {
-                      return #err("user's props in this game does not found!");
-                    };
-                  };
-                };
-                case _ {
-                  return #err("user not found!");
-                };
-              };
-            };
-            case _ {
-              return #err("some entities getting increamented are non-transactional!");
-            };
-          };
-          switch (i.timestamp) {
-            case (?ts) {
-              switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
-                case (?u) {
-                  switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
-                    case (?e) {
-                      switch (Trie.find(e, Utils.keyT(i.id), Text.equal)) {
-                        case (?entity) {
-                          let q : Int = Option.get(i.timestamp, 0);
-                          let _q : Int = Option.get(entity.timestamp, 0);
-                          if (Int.less(_q, q)) {
-                            return #err("some entities are not sufficient to get decreamented!");
-                          };
-                        };
-                        case _ {
-                          return #err("some entities getting decreamented not found!");
-                        };
-                      };
-                    };
-                    case _ {
-                      return #err("user's props in this game does not found!");
-                    };
-                  };
-                };
-                case _ {
-                  return #err("user not found!");
-                };
-              };
-            };
-            case _ {
-              return #err("some entities getting increamented are non-transactional!");
-            };
-          };
-        };
-      };
-      case _ {};
-    };
-    return #ok("");
-  };
-
-  private func isUpdateDataValid_(uid : Types.userId, gid : Types.gameId, tx : [Types.Entity]) : (Result.Result<Text, Text>) {
-    for (i in tx.vals()) {
-      switch (i.quantity) {
-        case (null) {
-          return #ok("");
-        };
-        case _ {
-          return #err("some entities are not updatable!");
-        };
-      };
-      switch (i.timestamp) {
-        case (null) {
-          return #ok("");
-        };
-        case _ {
-          return #err("some entities are not updatable!");
-        };
-      };
-    };
-    return #ok("");
-  };
-
-  private func transactEntities_(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : (Result.Result<Text, Text>) {
-    switch (tx.increment) {
-      case (?_e) {
-        for (i in _e.vals()) {
+  private func isUpdateArgsValid_(uid : Types.userId, args : Types.UpdateArgs) : (Result.Result<Text, Text>) {
+    switch (args.decrementQuantity) {
+      case (?iq) {
+        for (i in iq.vals()) {
+          // [i -> (gid, eid, float)]
           switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
-            case (?u) {
-              switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
+            case (?g) {
+              switch (Trie.find(g, Utils.keyT(i.0), Text.equal)) {
                 case (?e) {
-                  switch (Trie.find(e, Utils.keyT(i.id), Text.equal)) {
+                  switch (Trie.find(e, Utils.keyT(i.1), Text.equal)) {
                     case (?entity) {
-                      let q : Float = Option.get(entity.quantity, 0.0);
-                      let _q : Float = Option.get(i.quantity, 0.0);
-                      let ts : Int = Option.get(entity.timestamp, 0);
-                      let _ts : Int = Option.get(i.timestamp, 0);
-                      let n_entity : Types.Entity = {
-                        id = i.id;
-                        data = i.data;
-                        quantity = ?Float.add(q, _q);
-                        timestamp = ?Int.add(ts, _ts);
+                      let q = Option.get(entity.quantity, 0.0);
+                      let _q = i.2;
+                      if (Float.less(q, _q)) {
+                        return #err(i.1 # " entity is not sufficient to decrement");
                       };
-                      _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, n_entity);
                     };
                     case _ {
-                      let n_entity : Types.Entity = {
-                        id = i.id;
-                        data = i.data;
-                        quantity = i.quantity;
-                        timestamp = i.timestamp;
-                      };
-                      _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, n_entity);
+                      return #err(i.1 # " entity not found");
                     };
                   };
                 };
                 case _ {
-                  return #err("user's props in this game does not found!");
+                  return #err(i.0 # " game-entity not found");
                 };
               };
             };
             case _ {
-              return #err("user not found!");
+              return #err("user not found");
             };
           };
         };
       };
       case _ {};
     };
-    switch (tx.decrement) {
-      case (?_e) {
-        for (i in _e.vals()) {
-          switch (i.data) {
-            case (#item _ or #buff _ or #stats _) {
-              switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
-                case (?u) {
-                  switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
-                    case (?e) {
-                      switch (Trie.find(e, Utils.keyT(i.id), Text.equal)) {
-                        case (?entity) {
-                          let q : Float = Option.get(entity.quantity, 0.0);
-                          let _q : Float = Option.get(i.quantity, 0.0);
-                          let ts : Int = Option.get(entity.timestamp, 0);
-                          let _ts : Int = Option.get(i.timestamp, 0);
-                          let n_entity : Types.Entity = {
-                            id = i.id;
-                            data = i.data;
-                            quantity = ?Float.sub(q, _q);
-                            timestamp = ?Int.sub(ts, _ts);
-                          };
-                          _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, n_entity);
-                        };
-                        case _ {
-                          return #err("entity not found!");
-                        };
-                      };
+    return #ok("");
+  };
+
+  private func updateEntities_(uid : Types.userId, args : Types.UpdateArgs) : async (Result.Result<Text, Text>) {
+    switch (args.incrementQuantity) {
+      case (?iq) {
+        for (i in iq.vals()) {
+          // i->(gid, eid, float)
+          switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
+            case (?g) {
+              switch (Trie.find(g, Utils.keyT(i.0), Text.equal)) {
+                case (?e) {
+                  switch (Trie.find(e, Utils.keyT(i.1), Text.equal)) {
+                    case (?entity) {
+                      let q : Float = Float.add(Option.get(entity.quantity, 0.0), i.2);
+                      _entities := Trie.put3D(
+                        _entities,
+                        Utils.keyT(uid),
+                        Text.equal,
+                        Utils.keyT(i.0),
+                        Text.equal,
+                        Utils.keyT(i.1),
+                        Text.equal,
+                        {
+                          eid = i.1;
+                          gid = i.0;
+                          quantity = ?q;
+                          customData = null;
+                        },
+                      );
                     };
                     case _ {
-                      return #err("user's props in this game does not found!");
+                      _entities := Trie.put3D(
+                        _entities,
+                        Utils.keyT(uid),
+                        Text.equal,
+                        Utils.keyT(i.0),
+                        Text.equal,
+                        Utils.keyT(i.1),
+                        Text.equal,
+                        {
+                          eid = i.1;
+                          gid = i.0;
+                          quantity = ?(i.2);
+                          customData = null;
+                        },
+                      );
                     };
                   };
                 };
                 case _ {
-                  return #err("user not found!");
+                  _entities := Trie.put3D(
+                    _entities,
+                    Utils.keyT(uid),
+                    Text.equal,
+                    Utils.keyT(i.0),
+                    Text.equal,
+                    Utils.keyT(i.1),
+                    Text.equal,
+                    {
+                      eid = i.1;
+                      gid = i.0;
+                      quantity = ?(i.2);
+                      customData = null;
+                    },
+                  );
                 };
               };
             };
             case _ {
-              return #err("some entities getting increamented are non-transactional!");
+              return #err("user not found");
             };
           };
         };
       };
       case _ {};
     };
-    return #ok("transacted!");
-  };
 
-  public shared ({ caller }) func transactEntities(uid : Types.userId, gid : Types.gameId, tx : Types.TxData) : async (Result.Result<Text, Text>) {
-    //check if caller is authorised
-    switch (tx.increment) {
-      case (?entities) {
-        for (i in entities.vals()) {
-          if ((Principal.toText(caller) != gid) and (isPermitted_(gid, i.id, Principal.toText(caller)) == false)) {
-            return #err("caller not authorised to transact data!");
+    switch (args.decrementQuantity) {
+      case (?dq) {
+        for (i in dq.vals()) {
+          // i->(gid, eid, float)
+          switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
+            case (?g) {
+              switch (Trie.find(g, Utils.keyT(i.0), Text.equal)) {
+                case (?e) {
+                  switch (Trie.find(e, Utils.keyT(i.1), Text.equal)) {
+                    case (?entity) {
+                      let q : Float = Float.sub(Option.get(entity.quantity, 0.0), i.2);
+                      _entities := Trie.put3D(
+                        _entities,
+                        Utils.keyT(uid),
+                        Text.equal,
+                        Utils.keyT(i.0),
+                        Text.equal,
+                        Utils.keyT(i.1),
+                        Text.equal,
+                        {
+                          eid = i.1;
+                          gid = i.0;
+                          quantity = ?q;
+                          customData = null;
+                        },
+                      );
+                    };
+                    case _ {
+                      return #err(i.1 # " entity not found");
+                    };
+                  };
+                };
+                case _ {
+                  return #err(i.1 # " game-entity not found");
+                };
+              };
+            };
+            case _ {
+              return #err("user not found");
+            };
           };
         };
       };
       case _ {};
     };
-    switch (tx.decrement) {
-      case (?entities) {
-        for (i in entities.vals()) {
-          if ((Principal.toText(caller) != gid) and (isPermitted_(gid, i.id, Principal.toText(caller)) == false)) {
-            return #err("caller not authorised to transact data!");
+
+    switch (args.setCustomData) {
+      case (?d) {
+        for (i in d.vals()) {
+          switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
+            case (?g) {
+              _entities := Trie.put3D(
+                _entities,
+                Utils.keyT(uid),
+                Text.equal,
+                Utils.keyT(i.0),
+                Text.equal,
+                Utils.keyT(i.1),
+                Text.equal,
+                {
+                  eid = i.1;
+                  gid = i.0;
+                  quantity = null;
+                  customData = ?(i.2);
+                },
+              );
+            };
+            case _ {
+              return #err("user not found");
+            };
           };
         };
       };
       case _ {};
     };
-    //check tx data validity
-    switch (isTransactDataValid_(uid, gid, tx)) {
-      case (#ok _) {
-        return transactEntities_(uid, gid, tx);
-      };
-      case (#err e) {
-        return #err(e);
-      };
-    };
+
+    return #ok("updated");
   };
 
-  public shared ({ caller }) func updateEntities(uid : Types.userId, gid : Types.gameId, tx : [Types.Entity]) : async (Result.Result<Text, Text>) {
+  public shared ({ caller }) func updateEntities(uid : Types.userId, args : Types.UpdateArgs) : async (Result.Result<Text, Text>) {
     //check if caller authorised
-    for (i in tx.vals()) {
-      if ((Principal.toText(caller) != gid) and (isPermitted_(gid, i.id, Principal.toText(caller)) == false)) {
-        return #err("caller not authorised to transact data!");
-      };
-    };
-    switch (isUpdateDataValid_(uid, gid, tx)) {
-      case (#ok _) {
-        switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
-          case (?u) {
-            switch (Trie.find(u, Utils.keyT(gid), Text.equal)) {
-              case (?e) {
-                for (i in tx.vals()) {
-                  switch (Trie.find(e, Utils.keyT(i.id), Text.equal)) {
-                    case (?entity) {
-                      _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(i.id), Text.equal, i);
-                    };
-                    case _ {
-                      return #err("some entities not found!");
-                    };
-                  };
-                };
-                return #ok("updated!");
-              };
-              case _ {
-                return #err("user's props in this game does not found!");
-              };
-            };
-          };
-          case _ {
-            return #err("user not found!");
+    switch (args.incrementQuantity) {
+      case (?iq) {
+        for (i in iq.vals()) {
+          if ((Principal.toText(caller) != i.0) and (isPermitted_(i.0, i.1, Principal.toText(caller)) == false)) {
+            return #err("caller not authorised to transact data!");
           };
         };
       };
-      case (#err e) {
-        return #err(e);
+      case _ {};
+    };
+    switch (args.decrementQuantity) {
+      case (?dq) {
+        for (i in dq.vals()) {
+          if ((Principal.toText(caller) != i.0) and (isPermitted_(i.0, i.1, Principal.toText(caller)) == false)) {
+            return #err("caller not authorised to transact data!");
+          };
+        };
       };
+      case _ {};
+    };
+    switch (args.setCustomData) {
+      case (?d) {
+        for (i in d.vals()) {
+          if ((Principal.toText(caller) != i.0) and (isPermitted_(i.0, i.1, Principal.toText(caller)) == false)) {
+            return #err("caller not authorised to transact data!");
+          };
+        };
+      };
+      case _ {};
+    };
+
+    switch (isUpdateArgsValid_(uid, args)) {
+      case (#ok _){
+        switch(await updateEntities_(uid, args)){
+          case (#ok o){
+            return #ok(o);
+          };
+          case (#err e){
+            return #err(e);
+          };
+        }
+      };
+      case (#err e){
+        return #err(e);
+      }
     };
   };
 
