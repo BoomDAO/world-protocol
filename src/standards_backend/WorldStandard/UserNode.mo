@@ -39,12 +39,12 @@ import RandomUtil "../utils/RandomUtil";
 
 actor class UserNode() {
   // stable memory
-  private stable var _entities : Trie.Trie<Types.userId, Trie.Trie<Types.gameId, Trie.Trie<Types.entityId, Types.Entity>>> = Trie.empty(); //mapping user_principal_id -> [game_canister_ids -> [entities]]
+  private stable var _entities : Trie.Trie<Types.userId, Trie.Trie<Types.worldId, Trie.Trie<Types.entityId, Types.Entity>>> = Trie.empty(); //mapping user_principal_id -> [game_canister_ids -> [entities]]
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "GameCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   // Internal functions
   //
-  private func isPermitted_(gameId : Text, entityId : Text, principal : Text) : (Bool) {
-    let k = gameId # "+" #entityId;
+  private func isPermitted_(worldId : Text, entityId : Text, principal : Text) : (Bool) {
+    let k = worldId # "+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         switch (Trie.find(p, Utils.keyT(principal), Text.equal)) {
@@ -102,10 +102,10 @@ actor class UserNode() {
     return Buffer.toArray(outcomes);
   };
 
-  private func getEntity_(uid : Types.userId, gid : Types.gameId, eid : Types.entityId) : (?Types.Entity) {
+  private func getEntity_(uid : Types.userId, wid : Types.worldId, eid : Types.entityId) : (?Types.Entity) {
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
-        switch (Trie.find(g, Utils.keyT(gid), Text.equal)) {
+        switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?e) {
             switch (Trie.find(e, Utils.keyT(eid), Text.equal)) {
               case (?entity) {
@@ -127,9 +127,9 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionConfig_(uid : Types.userId, gid : Types.gameId, actionId : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Entity, Text>) {
+  private func validateActionConfig_(uid : Types.userId, wid : Types.worldId, actionId : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Entity, Text>) {
     var constraints = Option.get(actionConfig.actionConstraints, []);
-    var action : ?Types.Entity = getEntity_(uid, gid, actionId);
+    var action : ?Types.Entity = getEntity_(uid, wid, actionId);
     var new_action : ?Types.Entity = action;
     var _intervalStartTs : Nat = 0;
     var _actionCount : Nat = 0;
@@ -173,9 +173,9 @@ actor class UserNode() {
           };
         };
         case (#entityConstraint e) {
-          let _greaterThan = Option.get(e.greaterThan, 0.0);
-          let _lessThan = Option.get(e.lessThan, 0.0);
-          switch (getEntity_(uid, gid, e.entityId)) {
+          let _greaterThan : Float = Option.get(e.greaterThan, 0.0);
+          let _lessThan : Float = Option.get(e.lessThan, 0.0);
+          switch (getEntity_(uid, wid, e.entityId)) {
             case (?entity) {
               switch (entity.data) {
                 case (#standard s) {
@@ -203,13 +203,13 @@ actor class UserNode() {
     };
     return #ok({
       eid = actionId;
-      gid = gid;
+      wid = wid;
       data = #custom(#action a);
     });
   };
 
-  public shared ({ caller }) func processActionEntities(uid : Types.userId, gid : Types.gameId, actionId : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<[Types.Entity], Text>) {
-    assert (gid == Principal.toText(caller));
+  public shared ({ caller }) func processActionEntities(uid : Types.userId, wid : Types.worldId, actionId : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<[Types.Entity], Text>) {
+    assert(wid == Principal.toText(caller));
     let outcomes : [Config.ActionOutcome] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
@@ -256,18 +256,27 @@ actor class UserNode() {
             };
           };
         };
-        case (#custom c) {};
+        case (#custom c) {
+          switch (c.setCustomData) {
+            case (?data) {
+              if (isPermitted_(data.0, data.1, Principal.toText(caller)) == false) {
+                return #err("caller not authorized to processActionEntities");
+              };
+            };
+            case _ {};
+          };
+        };
       };
     };
 
     var b = Buffer.Buffer<Types.Entity>(0);
-    let isActionConfigValid = await validateActionConfig_(uid, gid, actionId, actionConfig);
+    let isActionConfigValid = await validateActionConfig_(uid, wid, actionId, actionConfig);
     switch (isActionConfigValid) {
       case (#ok e) {
-        if (isPermitted_(gid, actionId, Principal.toText(caller)) == false) {
+        if (isPermitted_(wid, actionId, Principal.toText(caller)) == false) {
           return #err("caller not authorized to processActionEntities");
         };
-        _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(actionId), Text.equal, e);
+        _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(actionId), Text.equal, e);
         b.add(e);
       };
       case (#err _) {
@@ -295,7 +304,7 @@ actor class UserNode() {
                   };
                   var new_entity : Types.Entity = {
                     eid = entity.eid;
-                    gid = entity.gid;
+                    wid = entity.wid;
                     data = #standard {
                       quantity = ?(_quantity + iq.2);
                       expiration = ?_expiration; //Here we will update code for expiration TODO:
@@ -307,7 +316,7 @@ actor class UserNode() {
                 case _ {
                   var new_entity : Types.Entity = {
                     eid = iq.1;
-                    gid = iq.0;
+                    wid = iq.0;
                     data = #standard {
                       quantity = ?(iq.2);
                       expiration = null; //Here we will update code for expiration TODO:
@@ -333,23 +342,21 @@ actor class UserNode() {
                   };
                   var new_entity : Types.Entity = {
                     eid = entity.eid;
-                    gid = entity.gid;
+                    wid = entity.wid;
                     data = #standard {
                       quantity = ?(_quantity - dq.2);
                       expiration = ?_expiration; //Here we will update code for expiration TODO:
                     };
                   };
-                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(entity.eid), Text.equal, new_entity);
+                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(dq.0), Text.equal, Utils.keyT(dq.1), Text.equal, new_entity);
                   b.add(new_entity);
                 };
                 case _ {};
               };
             };
-            case (#incrementExpiration ie) {
-              var entity = getEntity_(uid, ie.0, ie.1); //TODO:
+            case (#incrementExpiration ie) { //TODO:
             };
-            case (#decrementExpiration de) {
-              var entity = getEntity_(uid, de.0, de.1); //TODO:
+            case (#decrementExpiration de) { //TODO:
             };
           };
         };
@@ -358,7 +365,7 @@ actor class UserNode() {
             case (?data) {
               var new_entity : Types.Entity = {
                 eid = data.1;
-                gid = data.0;
+                wid = data.0;
                 data = #custom(data.2);
               };
               _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(data.1), Text.equal, Utils.keyT(data.0), Text.equal, new_entity);
@@ -372,15 +379,15 @@ actor class UserNode() {
     return #ok(Buffer.toArray(b));
   };
 
-  public shared ({ caller }) func manuallyOverwriteEntities(uid : Types.userId, gid : Types.gameId, entities : [Types.Entity]) : async (Result.Result<[Types.Entity], Text>) {
-    assert (Principal.toText(caller) == gid);
+  public shared ({ caller }) func manuallyOverwriteEntities(uid : Types.userId, wid : Types.worldId, entities : [Types.Entity]) : async (Result.Result<[Types.Entity], Text>) {
+    assert (Principal.toText(caller) == wid);
     for (entity in entities.vals()) {
-      if (isPermitted_(entity.gid, entity.eid, Principal.toText(caller)) == false) {
+      if (isPermitted_(entity.wid, entity.eid, Principal.toText(caller)) == false) {
         return #err("caller not authorized to update entities");
       };
     };
     for (entity in entities.vals()) {
-      _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(entity.eid), Text.equal, entity);
+      _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(entity.eid), Text.equal, entity);
     };
     return #ok(entities);
   };
@@ -396,11 +403,11 @@ actor class UserNode() {
     Cycles.balance();
   };
 
-  public query func getAllUserGameEntities(uid : Types.userId, gid : Types.gameId) : async (Result.Result<[Types.Entity], Text>) {
+  public query func getAllUserGameEntities(uid : Types.userId, wid : Types.worldId) : async (Result.Result<[Types.Entity], Text>) {
     var b = Buffer.Buffer<Types.Entity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
-        switch (Trie.find(g, Utils.keyT(gid), Text.equal)) {
+        switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?e) {
             for ((i, v) in Trie.iter(e)) {
               b.add(v);
@@ -418,10 +425,10 @@ actor class UserNode() {
     };
   };
 
-  public query func getSpecificUserGameEntities(uid : Types.userId, gid : Types.gameId, eids : [Types.entityId]) : async (Result.Result<[Types.Entity], Text>) {
+  public query func getSpecificUserGameEntities(uid : Types.userId, wid : Types.worldId, eids : [Types.entityId]) : async (Result.Result<[Types.Entity], Text>) {
     var b = Buffer.Buffer<Types.Entity>(0);
     for (eid in eids.vals()) {
-      switch (getEntity_(uid, gid, eid)) {
+      switch (getEntity_(uid, wid, eid)) {
         case (?e) b.add(e);
         case _ {
           return #err(eid # " entity not found");
@@ -439,10 +446,10 @@ actor class UserNode() {
     return Buffer.toArray(b);
   };
 
-  public query func getAllGameUserIds(gid : Types.gameId) : async [Types.userId] {
+  public query func getAllGameUserIds(wid : Types.worldId) : async [Types.userId] {
     var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
     for ((i, v) in Trie.iter(_entities)) {
-      switch (Trie.find(v, Utils.keyT(gid), Text.equal)) {
+      switch (Trie.find(v, Utils.keyT(wid), Text.equal)) {
         case (?g) { b.add(i) };
         case _ {};
       };
@@ -452,15 +459,15 @@ actor class UserNode() {
 
   //Game Canister Permission Rules
   //
-  public shared ({ caller }) func addEntityPermission(gameId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
+  public shared ({ caller }) func addEntityPermission(worldId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
     assert (isWorldHub_(caller));
-    let k = gameId # "+" #entityId;
+    let k = worldId # "+" #entityId;
     _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
   };
 
-  public shared ({ caller }) func removeEntityPermission(gameId : Text, entityId : Text, principal : Text) : async () {
+  public shared ({ caller }) func removeEntityPermission(worldId : Text, entityId : Text, principal : Text) : async () {
     assert (isWorldHub_(caller));
-    let k = gameId # "+" #entityId;
+    let k = worldId # "+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;

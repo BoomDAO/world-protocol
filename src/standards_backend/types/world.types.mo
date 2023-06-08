@@ -31,14 +31,14 @@ import Trie2D "mo:base/Trie";
 
 module {
     public type entityId = Text;
-    public type gameId = Text;
+    public type worldId = Text;
     public type userId = Text;
     public type nodeId = Text;
     public type actionId = Text;
 
     public type Entity = {
         eid : Text;
-        gid : Text;
+        wid : Text;
         data : {
             #standard : {
                 quantity : ?Float;
