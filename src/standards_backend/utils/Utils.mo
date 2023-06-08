@@ -103,4 +103,15 @@ module {
         var array : [Nat8] = Blob.toArray(blob);
         return array;
     };
+
+    public func isResultError<R,E>(result : Result.Result<R,E>) : (Bool){
+        switch(result){
+            case(#err(msg)){
+                return true;
+            };
+            case(#ok(msg)){
+                return false;
+            };
+        };
+    };
 };

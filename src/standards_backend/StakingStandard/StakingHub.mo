@@ -39,40 +39,16 @@ import ICRC1 "../types/icrc.types";
 import ENV "../utils/Env";
 import Ledger "../modules/Ledgers";
 import Utils "../utils/Utils";
+import TStaking "../types/staking.types";
 
 //Note : This configuration of StakingHub canister is only for 24hr staking period and is experimental, may get changed in future
 actor StakingHub {
-  type ICPStake = {
-    amount : Nat64;
-    dissolveAt : Int;
-    isDissolved : Bool;
-  };
-  type ICRCStake = {
-    amount : Nat;
-    dissolveAt : Int;
-    isDissolved : Bool;
-  };
-  type EXTStake = {
-    staker : Text; //principal
-    tokenIndex : Nat32;
-    dissolveAt : Int;
-    isDissolved : Bool;
-  };
-  type Stake = {
-    canister_id : Text;
-    token_type : Text;
-    amount : Nat;
-    index : ?Text;
-    dissolveAt : Int;
-    isDissolved : Bool;
-  };
-
   //Txs block heights
   private stable var icp_txs : Trie.Trie<Text, ICP.Tx> = Trie.empty(); //last 2000 txs of IC Ledger (verified in Payments canister) to prevent spam check in Payments canister
   private stable var icrc_txs : Trie.Trie<Text, Trie.Trie<Text, ICP.Tx_ICRC>> = Trie.empty(); // (icrc_token_canister_id -> tx_height -> Tx) last 2000 txs of ICRC-1 Ledger (verified in Payments canister) to prevent spam check in Payments canister
-  private stable var icp_stakes : Trie.Trie<Text, ICPStake> = Trie.empty(); //mapping user_principal -> ICP value stake user stake
-  private stable var icrc_stakes : Trie.Trie<Text, Trie.Trie<Text, ICRCStake>> = Trie.empty(); //mapping user_principal -> icrc_token_canister_id -> ICRC-1 token stake user hold
-  private stable var ext_stakes : Trie.Trie<Text, EXTStake> = Trie.empty(); //mapping "(ext_collection_canister_id + / + index)" -> Ext NFT stake user hold
+  private stable var icp_stakes : Trie.Trie<Text, TStaking.ICPStake> = Trie.empty(); //mapping user_principal -> ICP value stake user stake
+  private stable var icrc_stakes : Trie.Trie<Text, Trie.Trie<Text, TStaking.ICRCStake>> = Trie.empty(); //mapping user_principal -> icrc_token_canister_id -> ICRC-1 token stake user hold
+  private stable var ext_stakes : Trie.Trie<Text, TStaking.EXTStake> = Trie.empty(); //mapping "(ext_collection_canister_id + / + index)" -> Ext NFT stake user hold
 
   //to update Stakes of ICP/ICRC/EXT tokens
   private func updateStakes_(_of : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text, nft_index : ?Nat32) : () {
@@ -111,7 +87,7 @@ actor StakingHub {
           case (?_trie) {
             switch (Trie.find(_trie, Utils.keyT(_tcid), Text.equal)) {
               case (?h) {
-                var t : Trie.Trie<Text, ICRCStake> = _trie;
+                var t : Trie.Trie<Text, TStaking.ICRCStake> = _trie;
                 t := Trie.put(
                   t,
                   Utils.keyT(_tcid),
@@ -125,7 +101,7 @@ actor StakingHub {
                 icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_of), Text.equal, t).0;
               };
               case _ {
-                var t : Trie.Trie<Text, ICRCStake> = Trie.empty();
+                var t : Trie.Trie<Text, TStaking.ICRCStake> = Trie.empty();
                 t := Trie.put(
                   t,
                   Utils.keyT(_tcid),
@@ -141,7 +117,7 @@ actor StakingHub {
             };
           };
           case _ {
-            var _t : Trie.Trie<Text, ICRCStake> = Trie.empty();
+            var _t : Trie.Trie<Text, TStaking.ICRCStake> = Trie.empty();
             _t := Trie.put(
               _t,
               Utils.keyT(_tcid),
@@ -160,7 +136,7 @@ actor StakingHub {
         var key : Text = Option.get(token_canister_id, "");
         let default : Nat32 = 0;
         key := key # "/" #Nat32.toText(Option.get(nft_index, default)); //key = "token_canister_id" + "/" + "nft_index"
-        var e : EXTStake = {
+        var e : TStaking.EXTStake = {
           staker = _of;
           tokenIndex = Option.get(nft_index, default);
           dissolveAt = 0;
@@ -320,7 +296,7 @@ actor StakingHub {
           let ICRC1_Ledger : Ledger.ICRC1 = actor (_canister_id);
           var res : ICRC1.Result = await ICRC1_Ledger.icrc1_transfer(_req);
           let x : Nat = 0;
-          var t : Trie.Trie<Text, ICRCStake> = _trie;
+          var t : Trie.Trie<Text, TStaking.ICRCStake> = _trie;
           t := Trie.remove(t, Utils.keyT(_canister_id), Text.equal).0;
           icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_to), Text.equal, t).0;
         };
@@ -473,7 +449,7 @@ actor StakingHub {
       case (?_trie) {
         switch (Trie.find(_trie, Utils.keyT(token_canister_id), Text.equal)) {
           case (?s) {
-            var t : Trie.Trie<Text, ICRCStake> = _trie;
+            var t : Trie.Trie<Text, TStaking.ICRCStake> = _trie;
             t := Trie.put(
               t,
               Utils.keyT(token_canister_id),
@@ -535,8 +511,8 @@ actor StakingHub {
   };
 
   //User Queries
-  public query func getUserStakes(user_id : Text) : async ([Stake]) {
-    var b : Buffer.Buffer<Stake> = Buffer.Buffer<Stake>(0);
+  public query func getUserStakes(user_id : Text) : async ([TStaking.Stake]) {
+    var b : Buffer.Buffer<TStaking.Stake> = Buffer.Buffer<TStaking.Stake>(0);
     //put icp stakes
     switch (Trie.find(icp_stakes, Utils.keyT(user_id), Text.equal)) {
       case (?s) {

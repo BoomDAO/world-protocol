@@ -30,34 +30,28 @@ import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
 module {
-    public type entityId = Text;
-    public type gameId = Text;
-    public type userId = Text;
-    public type nodeId = Text;
-    public type actionId = Text;
-
-    public type Entity = {
-        eid : Text;
-        gid : Text;
-        data : {
-            #standard : {
-                quantity : ?Float;
-                expiration : ?Nat;
-            };
-            #custom : CustomData;
-        };
+    public type ICPStake = {
+    amount : Nat64;
+    dissolveAt : Int;
+    isDissolved : Bool;
     };
-    public type CustomData = {
-        #action : Action
+    public type ICRCStake = {
+    amount : Nat;
+    dissolveAt : Int;
+    isDissolved : Bool;
     };
-    public type Action = {
-        intervalStartTs : Nat;
-        actionCount : Nat;
+    public type EXTStake = {
+    staker : Text; //principal
+    tokenIndex : Nat32;
+    dissolveAt : Int;
+    isDissolved : Bool;
     };
-    public type EntityPermission = {
-        incrementQuantityDailyCap : ?Nat;
-        decrementQuantityDailyCap : ?Nat;
-        incrementExpirationDailyCap : ?Nat;
-        decrementExpirationDailyCap : ?Nat;
+    public type Stake = {
+    canister_id : Text;
+    token_type : Text;
+    amount : Nat;
+    index : ?Text;
+    dissolveAt : Int;
+    isDissolved : Bool;
     };
-};
+}

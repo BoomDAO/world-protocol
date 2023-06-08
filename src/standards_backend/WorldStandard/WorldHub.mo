@@ -29,7 +29,7 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
-import WorldNode "./WorldNode";
+import UserNode "./UserNode";
 import Types "../types/world.types";
 import JSON "../utils/Json";
 import Parser "../utils/Parser";
@@ -39,7 +39,6 @@ import AccountIdentifier "../utils/AccountIdentifier";
 import Hex "../utils/Hex";
 import EXTCORE "../utils/Core";
 import EXT "../types/ext.types";
-import Gacha "../modules/Gacha";
 import Configs "../modules/Configs";
 import Management "../modules/Management";
 
@@ -93,7 +92,7 @@ actor WorldHub {
 
     private func createCanister_() : async (Text) {
         Cycles.add(2000000000000);
-        let canister = await WorldNode.WorldNode();
+        let canister = await UserNode.UserNode();
         let _ = await updateCanister_(canister); // update canister permissions and settings
         let canister_id = Principal.fromActor(canister);
         return Principal.toText(canister_id);
@@ -128,7 +127,7 @@ actor WorldHub {
         return Trie.size(_uids);
     };
 
-    public query func getWorldNodeCanisterId(_uid : Text) : async (Result.Result<Text, Text>) {
+    public query func getUserNodeCanisterId(_uid : Text) : async (Result.Result<Text, Text>) {
         switch (Trie.find(_uids, Utils.keyT(_uid), Text.equal)) {
             case (?c) {
                 return #ok(c);
@@ -187,7 +186,7 @@ actor WorldHub {
 
     public shared ({ caller }) func createNewUser() : async (Result.Result<Text, Text>) {
         var _uid : Text = Principal.toText(caller);
-        switch (await getWorldNodeCanisterId(_uid)) {
+        switch (await getUserNodeCanisterId(_uid)) {
             case (#ok o) {
                 return #err("user already exist");
             };
@@ -220,7 +219,7 @@ actor WorldHub {
     //
     public shared ({ caller }) func admin_create_user(_uid : Text) : async (Result.Result<Text, Text>) {
         assert (isAdmin_(caller));
-        switch (await getWorldNodeCanisterId(_uid)) {
+        switch (await getUserNodeCanisterId(_uid)) {
             case (#ok o) {
                 return #err("user already exist");
             };
