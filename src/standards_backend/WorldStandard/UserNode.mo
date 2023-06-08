@@ -209,6 +209,7 @@ actor class UserNode() {
   };
 
   public shared ({ caller }) func processActionEntities(uid : Types.userId, gid : Types.gameId, actionId : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<[Types.Entity], Text>) {
+    assert (gid == Principal.toText(caller));
     let outcomes : [Config.ActionOutcome] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
@@ -216,6 +217,9 @@ actor class UserNode() {
         case (#standard s) {
           switch (s.update) {
             case (#decrementQuantity dq) {
+              if (isPermitted_(dq.0, dq.1, Principal.toText(caller)) == false) {
+                return #err("caller not authorized to processActionEntities");
+              };
               var _entity = getEntity_(uid, dq.0, dq.1);
               switch (_entity) {
                 case (?entity) {
@@ -235,7 +239,21 @@ actor class UserNode() {
                 case _ {};
               };
             };
-            case _ {};
+            case (#incrementQuantity iq) {
+              if (isPermitted_(iq.0, iq.1, Principal.toText(caller)) == false) {
+                return #err("caller not authorized to processActionEntities");
+              };
+            };
+            case (#incrementExpiration ie) {
+              if (isPermitted_(ie.0, ie.1, Principal.toText(caller)) == false) {
+                return #err("caller not authorized to processActionEntities");
+              };
+            };
+            case (#decrementExpiration de) {
+              if (isPermitted_(de.0, de.1, Principal.toText(caller)) == false) {
+                return #err("caller not authorized to processActionEntities");
+              };
+            };
           };
         };
         case (#custom c) {};
@@ -246,6 +264,9 @@ actor class UserNode() {
     let isActionConfigValid = await validateActionConfig_(uid, gid, actionId, actionConfig);
     switch (isActionConfigValid) {
       case (#ok e) {
+        if (isPermitted_(gid, actionId, Principal.toText(caller)) == false) {
+          return #err("caller not authorized to processActionEntities");
+        };
         _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(actionId), Text.equal, e);
         b.add(e);
       };
@@ -351,11 +372,17 @@ actor class UserNode() {
     return #ok(Buffer.toArray(b));
   };
 
-  public shared ({caller}) func manuallyOverwriteEntities(uid : Types.userId, gid : Types.gameId, entities : [Types.Entity]) : async ([Types.Entity]) {
-    for(entity in entities.vals()) {
+  public shared ({ caller }) func manuallyOverwriteEntities(uid : Types.userId, gid : Types.gameId, entities : [Types.Entity]) : async (Result.Result<[Types.Entity], Text>) {
+    assert (Principal.toText(caller) == gid);
+    for (entity in entities.vals()) {
+      if (isPermitted_(entity.gid, entity.eid, Principal.toText(caller)) == false) {
+        return #err("caller not authorized to update entities");
+      };
+    };
+    for (entity in entities.vals()) {
       _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(gid), Text.equal, Utils.keyT(entity.eid), Text.equal, entity);
     };
-    return entities;
+    return #ok(entities);
   };
 
   public shared ({ caller }) func adminCreateUser(uid : Text) : async () {
