@@ -19,15 +19,15 @@ module ActionResult {
     public type gameId = Text;
     public type entityId = Text;
 
-    public func generateActionResultOutcomes(actionResult : Config.ActionResult) : async (Result.Result<(outcomes : [Config.ActionOutcome]),  Text>) {
-        var outcomes = Buffer.Buffer<Config.ActionOutcome>(0);
+    public func generateActionResultOutcomes(actionResult : Config.ActionResult) : async (Result.Result<(outcomes : [Config.ActionOutcomeOption]),  Text>) {
+        var outcomes = Buffer.Buffer<Config.ActionOutcomeOption>(0);
 
-        for (roll in actionResult.rolls.vals()) {
+        for (outcome in actionResult.outcomes.vals()) {
             var accumulated_weight : Float = 0;
             
-            //A) Compute total weight on the current roll
-            for (outcome in roll.outcomes.vals()) {
-                switch (outcome) {
+            //A) Compute total weight on the current outcome
+            for (outcomeOption in outcome.possibleOutcomes.vals()) {
+                switch (outcomeOption) {
                     case (#standard(e)) { accumulated_weight += e.weight; };
                     case (#custom(c)) { accumulated_weight += c.weight; };
                 };
@@ -35,19 +35,19 @@ module ActionResult {
 
             //B) Gen a random number using the total weight as max value
             let rand_perc = await RandomUtil.get_random_perc();
-            var dice_roll = (rand_perc * 1.0 * accumulated_weight);
+            var dice_outcome = (rand_perc * 1.0 * accumulated_weight);
 
             //C Pick outcomes base on their weights
-            label outcome_loop for (outcome in  roll.outcomes.vals()) {
-                let outcome_weight = switch (outcome) {
+            label outcome_loop for (outcomeOption in outcome.possibleOutcomes.vals()) {
+                let outcome_weight = switch (outcomeOption) {
                     case (#standard(e)) e.weight;
                     case (#custom(c)) c.weight;
                 };
-                if (outcome_weight >= dice_roll) {
-                    outcomes.add(outcome);
+                if (outcome_weight >= dice_outcome) {
+                    outcomes.add(outcomeOption);
                     break outcome_loop;
                 } else {
-                    dice_roll -= outcome_weight;
+                    dice_outcome -= outcome_weight;
                 };
             };
         };

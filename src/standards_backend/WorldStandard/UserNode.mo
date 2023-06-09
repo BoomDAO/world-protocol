@@ -71,34 +71,38 @@ actor class UserNode() {
     return false;
   };
 
-  private func generateActionResultOutcomes_(actionResult : Config.ActionResult) : async ([Config.ActionOutcome]) {
-    var outcomes = Buffer.Buffer<Config.ActionOutcome>(0);
-    for (roll in actionResult.rolls.vals()) {
+  private func generateActionResultOutcomes_(actionResult : Config.ActionResult) : async ([Config.ActionOutcomeOption]) {
+    var outcomes = Buffer.Buffer<Config.ActionOutcomeOption>(0);
+    for (outcome in actionResult.outcomes.vals()) {
       var accumulated_weight : Float = 0;
-      //A) Compute total weight on the current roll
-      for (outcome in roll.outcomes.vals()) {
-        switch (outcome) {
+
+      //A) Compute total weight on the current outcome
+      for (outcomeOption in outcome.possibleOutcomes.vals()) {
+        switch (outcomeOption) {
           case (#standard(e)) { accumulated_weight += e.weight };
           case (#custom(c)) { accumulated_weight += c.weight };
         };
       };
+
       //B) Gen a random number using the total weight as max value
       let rand_perc = await RandomUtil.get_random_perc();
-      var dice_roll = (rand_perc * 1.0 * accumulated_weight);
+      var dice_outcome = (rand_perc * 1.0 * accumulated_weight);
+
       //C Pick outcomes base on their weights
-      label outcome_loop for (outcome in roll.outcomes.vals()) {
-        let outcome_weight = switch (outcome) {
+      label outcome_loop for (outcomeOption in outcome.possibleOutcomes.vals()) {
+        let outcome_weight = switch (outcomeOption) {
           case (#standard(e)) e.weight;
           case (#custom(c)) c.weight;
         };
-        if (outcome_weight >= dice_roll) {
-          outcomes.add(outcome);
+        if (outcome_weight >= dice_outcome) {
+          outcomes.add(outcomeOption);
           break outcome_loop;
         } else {
-          dice_roll -= outcome_weight;
+          dice_outcome -= outcome_weight;
         };
       };
     };
+
     return Buffer.toArray(outcomes);
   };
 
@@ -209,18 +213,18 @@ actor class UserNode() {
   };
 
   public shared ({ caller }) func processActionEntities(uid : Types.userId, wid : Types.worldId, actionId : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<[Types.Entity], Text>) {
-    assert(wid == Principal.toText(caller));
-    let outcomes : [Config.ActionOutcome] = await generateActionResultOutcomes_(actionConfig.actionResult);
+    assert (wid == Principal.toText(caller));
+    let outcomes : [Config.ActionOutcomeOption] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
       switch (outcome) {
         case (#standard s) {
           switch (s.update) {
-            case (#decrementQuantity dq) {
-              if (isPermitted_(dq.0, dq.1, Principal.toText(caller)) == false) {
+            case (#spendQuantity sq) {
+              if (isPermitted_(sq.0, sq.1, Principal.toText(caller)) == false) {
                 return #err("caller not authorized to processActionEntities");
               };
-              var _entity = getEntity_(uid, dq.0, dq.1);
+              var _entity = getEntity_(uid, sq.0, sq.1);
               switch (_entity) {
                 case (?entity) {
                   var _quantity = 0.0;
@@ -232,24 +236,45 @@ actor class UserNode() {
                     };
                     case _ {};
                   };
-                  if (Float.less(_quantity, dq.2)) {
-                    return #err(dq.1 # " entityId cannot undergo decrement");
+                  if (Float.less(_quantity, sq.2)) {
+                    return #err(sq.1 # " entityId cannot undergo spendQuantity");
                   };
                 };
                 case _ {};
               };
             };
-            case (#incrementQuantity iq) {
-              if (isPermitted_(iq.0, iq.1, Principal.toText(caller)) == false) {
+            case (#receiveQuantity rq) {
+              if (isPermitted_(rq.0, rq.1, Principal.toText(caller)) == false) {
                 return #err("caller not authorized to processActionEntities");
               };
             };
-            case (#incrementExpiration ie) {
-              if (isPermitted_(ie.0, ie.1, Principal.toText(caller)) == false) {
+            case (#renewExpiration re) {
+              if (isPermitted_(re.0, re.1, Principal.toText(caller)) == false) {
                 return #err("caller not authorized to processActionEntities");
               };
             };
-            case (#decrementExpiration de) {
+            case (#reduceExpiration re) {
+              if (isPermitted_(re.0, re.1, Principal.toText(caller)) == false) {
+                return #err("caller not authorized to processActionEntities");
+              };
+              var _entity = getEntity_(uid, re.0, re.1);
+              switch (_entity) {
+                case (?entity) {
+                  var _expiration = 0;
+                  switch (entity.data) {
+                    case (#standard s) {
+                      _expiration := Option.get(s.expiration, 0);
+                    };
+                    case _ {};
+                  };
+                  if (Nat.less(_expiration, re.2)) {
+                    return #err(re.1 # " entityId cannot undergo reduceExpiration");
+                  };
+                };
+                case _ {};
+              };
+            };
+            case (#deleteEntity de) {
               if (isPermitted_(de.0, de.1, Principal.toText(caller)) == false) {
                 return #err("caller not authorized to processActionEntities");
               };
@@ -289,8 +314,8 @@ actor class UserNode() {
       switch (outcome) {
         case (#standard s) {
           switch (s.update) {
-            case (#incrementQuantity iq) {
-              var _entity = getEntity_(uid, iq.0, iq.1);
+            case (#receiveQuantity rq) {
+              var _entity = getEntity_(uid, rq.0, rq.1);
               switch (_entity) {
                 case (?entity) {
                   var _quantity = 0.0;
@@ -306,28 +331,28 @@ actor class UserNode() {
                     eid = entity.eid;
                     wid = entity.wid;
                     data = #standard {
-                      quantity = ?(_quantity + iq.2);
+                      quantity = ?(_quantity + rq.2);
                       expiration = ?_expiration; //Here we will update code for expiration TODO:
                     };
                   };
-                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(iq.0), Text.equal, Utils.keyT(entity.eid), Text.equal, new_entity);
+                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(rq.0), Text.equal, Utils.keyT(entity.eid), Text.equal, new_entity);
                   b.add(new_entity);
                 };
                 case _ {
                   var new_entity : Types.Entity = {
-                    eid = iq.1;
-                    wid = iq.0;
+                    eid = rq.1;
+                    wid = rq.0;
                     data = #standard {
-                      quantity = ?(iq.2);
+                      quantity = ?(rq.2);
                       expiration = null; //Here we will update code for expiration TODO:
                     };
                   };
-                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(iq.0), Text.equal, Utils.keyT(iq.1), Text.equal, new_entity);
+                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(rq.0), Text.equal, Utils.keyT(rq.1), Text.equal, new_entity);
                   b.add(new_entity);
                 };
               };
             };
-            case (#decrementQuantity dq) {
+            case (#spendQuantity dq) {
               var _entity = getEntity_(uid, dq.0, dq.1);
               switch (_entity) {
                 case (?entity) {
@@ -354,9 +379,70 @@ actor class UserNode() {
                 case _ {};
               };
             };
-            case (#incrementExpiration ie) { //TODO:
+            case (#renewExpiration re) {
+              var _entity = getEntity_(uid, re.0, re.1);
+              switch (_entity) {
+                case (?entity) {
+                  var _expiration = 0;
+                  var _quantity = 0.0;
+                  switch (entity.data) {
+                    case (#standard s) {
+                      _quantity := Option.get(s.quantity, 0.0);
+                      _expiration := Option.get(s.expiration, 0);
+                    };
+                    case _ {};
+                  };
+                  var new_expiration = 0;
+                  let t : Text = Int.toText(Time.now());
+                  let time : Nat = Utils.textToNat(t);
+                  if (_expiration < time) {
+                    new_expiration := time + re.2;
+                  } else{
+                    new_expiration := _expiration + re.2;
+                  };
+                  var new_entity : Types.Entity = {
+                    eid = entity.eid;
+                    wid = entity.wid;
+                    data = #standard {
+                      quantity = ?_quantity;
+                      expiration = ?new_expiration;
+                    };
+                  };
+                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(re.0), Text.equal, Utils.keyT(re.1), Text.equal, new_entity);
+                  b.add(new_entity);
+                };
+                case _ {};
+              };
             };
-            case (#decrementExpiration de) { //TODO:
+            case (#reduceExpiration re) {
+              var _entity = getEntity_(uid, re.0, re.1);
+              switch (_entity) {
+                case (?entity) {
+                  var _expiration = 0;
+                  var _quantity = 0.0;
+                  switch (entity.data) {
+                    case (#standard s) {
+                      _quantity := Option.get(s.quantity, 0.0);
+                      _expiration := Option.get(s.expiration, 0);
+                    };
+                    case _ {};
+                  };
+                  var new_entity : Types.Entity = {
+                    eid = entity.eid;
+                    wid = entity.wid;
+                    data = #standard {
+                      quantity = ?_quantity;
+                      expiration = ?(_expiration - re.2);
+                    };
+                  };
+                  _entities := Trie.put3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(re.0), Text.equal, Utils.keyT(re.1), Text.equal, new_entity);
+                  b.add(new_entity);
+                };
+                case _ {};
+              };
+            };
+            case (#deleteEntity de) {
+              _entities := Trie.remove3D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(de.0), Text.equal, Utils.keyT(de.1), Text.equal).0;
             };
           };
         };

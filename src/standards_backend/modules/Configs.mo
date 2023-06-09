@@ -63,30 +63,36 @@ module{
     };
 
     //ActionResult
+    public type quantity = Float;
+    public type duration = Nat;
     type CustomData = TDatabase.CustomData;
     
     public type UpdateStandardEntity = {
         weight: Float;
         update : {
-            #incrementQuantity : (
+            #spendQuantity : (
                 worldId,
                 entityId,
-                Float
+                quantity
             );
-            #decrementQuantity : (
+            #receiveQuantity : (
                 worldId,
                 entityId,
-                Float
+                quantity
             );
-            #incrementExpiration : (
+            #renewExpiration : (
                 worldId,
                 entityId,
-                Nat
+                duration
             );
-            #decrementExpiration : (
+            #reduceExpiration : (
                 worldId,
                 entityId,
-                Nat
+                duration
+            );
+            #deleteEntity : (
+                worldId,
+                entityId
             );
         }
     };
@@ -94,23 +100,22 @@ module{
         weight: Float;
         setCustomData : ?(worldId, entityId, CustomData);
     };
-    public type ActionOutcome = {
+    public type ActionOutcomeOption = {
         #standard : UpdateStandardEntity;
         #custom : UpdateCustomEntity;
     };
-    public type ActionRoll = {
-        outcomes: [ActionOutcome];
+    public type ActionOutcome = {
+        possibleOutcomes: [ActionOutcomeOption];
     };
-    public type ActionResult = 
-    {
-        rolls: [ActionRoll];
+    public type ActionResult = {
+        outcomes: [ActionOutcome];
     };
 
     //ActionConfig
     public type ActionArg = 
     {
         #burnNft : {actionId: Text; index: Nat32; aid: Text};
-        #spendTokens : {actionId: Text; hash: Nat64; from : Text; };
+        #spendTokens : {actionId: Text; hash: Nat64;  toPrincipal : Text; };
         #spendEntities : {actionId: Text; };
         #claimStakingReward : {actionId: Text; tokenCanister: Text; };
     };
@@ -118,8 +123,8 @@ module{
     public type ActionDataType = 
     {
         #burnNft : {nftCanister: Text;};
-        #spendTokens : {tokenCanister: Text; amt: Float; to_p : Text; };
-        #spendEntities : {entities: [(wid : Text, eid : Text, quantity : Float)]};
+        #spendTokens : {tokenCanister: ? Text; amt: Float; };
+        #spendEntities : {};
         #claimStakingReward : { requiredAmount : Nat };
     };
     public type ActionConstraint = 
@@ -222,17 +227,17 @@ module{
             configDataType = #action {
                 actionDataType = #burnNft { nftCanister = ""; };
                 actionResult = { 
-                    rolls = [
+                    outcomes = [
                         {
-                            outcomes = [
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_cake", 1);  weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_candy", 1); weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_chocolate", 1);  weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_croissant", 1);  weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_cupcake", 1);  weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_donut", 1);  weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_ice_cream", 1);  weight = 100;},
-                                #standard { update = #incrementQuantity ("game", "pastry_candy_marshmallow", 1);  weight = 100;},
+                            possibleOutcomes = [
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_cake", 1);  weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_candy", 1); weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_chocolate", 1);  weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_croissant", 1);  weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_cupcake", 1);  weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_donut", 1);  weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_ice_cream", 1);  weight = 100;},
+                                #standard { update = #receiveQuantity ("game", "pastry_candy_marshmallow", 1);  weight = 100;},
                             ]
                         }
                     ]
@@ -245,12 +250,12 @@ module{
         { 
             eid = "buyItem1_Icp";
             configDataType = #action {
-                actionDataType =  #spendTokens { tokenCanister =  ENV.Ledger; amt = 0.0001; to_p = ENV.paymenthub_canister_id; };
+                actionDataType =  #spendTokens { tokenCanister =  null; amt = 0.0001; };
                 actionResult = { 
-                    rolls = [
+                    outcomes = [
                         {
-                            outcomes = [
-                                #standard { update = #incrementQuantity ("game", "item1", 1); weight = 100;},
+                            possibleOutcomes = [
+                                #standard { update = #receiveQuantity ("game", "item1", 1); weight = 100;},
                             ]
                         }
                     ]
@@ -263,12 +268,12 @@ module{
         { 
             eid = "buyItem2_Icrc";
             configDataType = #action {
-                actionDataType =  #spendTokens { tokenCanister =  ENV.ICRC1_Ledger; amt = 0.0001; to_p = ENV.paymenthub_canister_id; };
+                actionDataType =  #spendTokens { tokenCanister = ? ENV.ICRC1_Ledger; amt = 0.0001; };
                 actionResult = { 
-                    rolls = [
+                    outcomes = [
                         {
-                            outcomes = [
-                                #standard { update = #incrementQuantity ("game", "item2", 1); weight = 100;},
+                            possibleOutcomes = [
+                                #standard { update = #receiveQuantity ("game", "item2", 1); weight = 100;},
                             ]
                         }
                     ]
@@ -281,17 +286,17 @@ module{
         { 
             eid = "buyItem2_item1";
             configDataType = #action {
-                actionDataType =  #spendTokens { tokenCanister =  ENV.Ledger; amt = 0.0001; to_p = ENV.paymenthub_canister_id; };
+                actionDataType =  #spendEntities {};
                 actionResult = { 
-                    rolls = [
+                    outcomes = [
                         {//Substract
-                            outcomes = [
-                                #standard { update = #decrementQuantity ("game", "item2", 1); weight = 100;},
+                            possibleOutcomes = [
+                                #standard { update = #spendQuantity ("game", "item2", 1); weight = 100;},
                             ]
                         },
                         {//Add
-                            outcomes = [
-                                #standard { update = #incrementQuantity ("game", "item1", 1); weight = 100;},
+                            possibleOutcomes = [
+                                #standard { update = #receiveQuantity ("game", "item1", 1); weight = 100;},
                             ]
                         }
                     ]

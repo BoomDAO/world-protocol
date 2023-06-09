@@ -135,7 +135,7 @@ actor PaymentHub {
 
   //ICRC1 Ledger Canister Query to verify ICRC-1 tx index
   //NOTE : Do Not Forget to change token_canister_id to query correct ICRC-1 Ledger
-  private func queryIcrcTx_(index : Nat, _to : Text, _from : Text, _amt : Nat) : async (Result.Result<Text, Text>) {
+  private func queryIcrcTx_(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (Result.Result<Text, Text>) {
     let l : Nat = 1;
     var _req : ICRC1.GetTransactionsRequest = {
       start = index;
@@ -215,7 +215,7 @@ actor PaymentHub {
   public shared (msg) func verifyTxIcrc(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (ICP.Response) {
     assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
     assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
-    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, _to, _from, _amt);
+    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, _to, _from, _amt, token_canister_id);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(token_canister_id), Text.equal)) {
