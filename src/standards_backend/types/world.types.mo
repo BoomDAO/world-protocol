@@ -55,9 +55,9 @@ module {
         actionCount : Nat;
     };
     public type EntityPermission = {
-        incrementQuantityDailyCap : ?Nat;
-        decrementQuantityDailyCap : ?Nat;
-        incrementExpirationDailyCap : ?Nat;
-        decrementExpirationDailyCap : ?Nat;
+        #spendQuantityCap: { intervalDuration: Nat; capPerInterval: Float; };
+        #receiveQuantityCap : { intervalDuration: Nat; capPerInterval: Float; };
+        #renewExpirationCap : { intervalDuration: Nat; capPerInterval: Nat; };
+        #reduceExpirationCap : { intervalDuration: Nat; capPerInterval: Nat; };
     };
 };

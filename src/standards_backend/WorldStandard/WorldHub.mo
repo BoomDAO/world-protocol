@@ -49,6 +49,7 @@ actor WorldHub {
     private stable var _nodes : [Types.nodeId] = []; //all user db canisters as nodes
     private stable var _admins : [Text] = ENV.admins; //admins for user db
     private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "GameCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+    private stable var _globalPermissions : Trie.Trie<Types.worldId, [Types.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
@@ -112,9 +113,14 @@ actor WorldHub {
         for ((_key, _permission) in Trie.iter(_permissions)) {
             let node = actor (canister_id) : actor {
                 updateNodePermissions : shared (Text, Trie.Trie<Text, Types.EntityPermission>) -> async ();
+                updateAllNodeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
             };
             await node.updateNodePermissions(_key, _permission);
         };
+        let node = actor (canister_id) : actor {
+            updateAllNodeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
+        };
+        await node.updateAllNodeGlobalPermissions(_globalPermissions);
     };
 
     //Queries
@@ -302,6 +308,48 @@ actor WorldHub {
                 removeEntityPermission : shared (Text, Text, Text) -> async ();
             };
             await node.removeEntityPermission(gameId, entityId, principal);
+        };
+    };
+
+    public shared ({ caller }) func grantGlobalPermission(principal : Text) : async () {
+        switch (Trie.find(_globalPermissions, Utils.keyT(Principal.toText(caller)), Text.equal)) {
+            case (?p) {
+                var b : Buffer.Buffer<Text> = Buffer.fromArray(p);
+                b.add(principal);
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(Principal.toText(caller)), Text.equal, Buffer.toArray(b)).0;
+            };
+            case _ {
+                var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
+                b.add(principal);
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(Principal.toText(caller)), Text.equal, Buffer.toArray(b)).0;
+            };
+        };
+        for (i in _nodes.vals()) {
+            let node = actor (i) : actor {
+                grantGlobalPermission : shared (Text, Text) -> async ();
+            };
+            await node.grantGlobalPermission(Principal.toText(caller), principal);
+        };
+    };
+
+    public shared ({ caller }) func removeGlobalPermission(principal : Text) : async () {
+        switch (Trie.find(_globalPermissions, Utils.keyT(Principal.toText(caller)), Text.equal)) {
+            case (?p) {
+                var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
+                for (i in p.vals()) {
+                    if (i != principal) {
+                        b.add(i);
+                    };
+                };
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(Principal.toText(caller)), Text.equal, Buffer.toArray(b)).0;
+            };
+            case _ {};
+        };
+        for (i in _nodes.vals()) {
+            let node = actor (i) : actor {
+                removeGlobalPermission : shared (Text, Text) -> async ();
+            };
+            await node.removeGlobalPermission(Principal.toText(caller), principal);
         };
     };
 

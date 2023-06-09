@@ -39,17 +39,31 @@ import RandomUtil "../utils/RandomUtil";
 
 actor class UserNode() {
   // stable memory
-  private stable var _entities : Trie.Trie<Types.userId, Trie.Trie<Types.worldId, Trie.Trie<Types.entityId, Types.Entity>>> = Trie.empty(); //mapping user_principal_id -> [game_canister_ids -> [entities]]
-  private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "GameCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+  private stable var _entities : Trie.Trie<Types.userId, Trie.Trie<Types.worldId, Trie.Trie<Types.entityId, Types.Entity>>> = Trie.empty(); //mapping user_principal_id -> [world_canister_ids -> [entities]]
+  private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "WorldCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+  private stable var _globalPermissions : Trie.Trie<Types.worldId, [Types.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
+
   // Internal functions
   //
   private func isPermitted_(worldId : Text, entityId : Text, principal : Text) : (Bool) {
+    //check if globally permitted
+    switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
+      case (?p) {
+        for(i in p.vals()) {
+          if(i == principal) {
+            return true;
+          };
+        };
+      };
+      case _ {};
+    };
+
     let k = worldId # "+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         switch (Trie.find(p, Utils.keyT(principal), Text.equal)) {
           case (?entityPermission) {
-            return true; //implementation for limit over DailyCap for decrement/increment in EntityPermission left!
+            return true; // TODO: implementation for limit over DailyCap for spend/receive Quantity and reduce/renew Expiration in EntityPermission
           };
           case _ {
             return false;
@@ -489,7 +503,7 @@ actor class UserNode() {
     Cycles.balance();
   };
 
-  public query func getAllUserGameEntities(uid : Types.userId, wid : Types.worldId) : async (Result.Result<[Types.Entity], Text>) {
+  public query func getAllUserWorldEntities(uid : Types.userId, wid : Types.worldId) : async (Result.Result<[Types.Entity], Text>) {
     var b = Buffer.Buffer<Types.Entity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
@@ -511,7 +525,7 @@ actor class UserNode() {
     };
   };
 
-  public query func getSpecificUserGameEntities(uid : Types.userId, wid : Types.worldId, eids : [Types.entityId]) : async (Result.Result<[Types.Entity], Text>) {
+  public query func getSpecificUserWorldEntities(uid : Types.userId, wid : Types.worldId, eids : [Types.entityId]) : async (Result.Result<[Types.Entity], Text>) {
     var b = Buffer.Buffer<Types.Entity>(0);
     for (eid in eids.vals()) {
       switch (getEntity_(uid, wid, eid)) {
@@ -532,7 +546,7 @@ actor class UserNode() {
     return Buffer.toArray(b);
   };
 
-  public query func getAllGameUserIds(wid : Types.worldId) : async [Types.userId] {
+  public query func getAllWorldUserIds(wid : Types.worldId) : async [Types.userId] {
     var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
     for ((i, v) in Trie.iter(_entities)) {
       switch (Trie.find(v, Utils.keyT(wid), Text.equal)) {
@@ -543,7 +557,7 @@ actor class UserNode() {
     return Buffer.toArray(b);
   };
 
-  //Game Canister Permission Rules
+  //World Canister Permission Rules
   //
   public shared ({ caller }) func addEntityPermission(worldId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
     assert (isWorldHub_(caller));
@@ -562,9 +576,45 @@ actor class UserNode() {
     };
   };
 
-  //to update permissions of newly created nodes
+  public shared ({ caller }) func grantGlobalPermission(worldId : Types.worldId, principal : Text) : async () {
+    assert(isWorldHub_(caller));
+        switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
+            case (?p) {
+                var b : Buffer.Buffer<Text> = Buffer.fromArray(p);
+                b.add(principal);
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(worldId), Text.equal, Buffer.toArray(b)).0;
+            };
+            case _ {
+                var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
+                b.add(principal);
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(worldId), Text.equal, Buffer.toArray(b)).0;
+            };
+        };
+    };
+
+    public shared ({ caller }) func removeGlobalPermission(worldId : Types.worldId, principal : Text) : async () {
+      assert(isWorldHub_(caller));
+        switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
+            case (?p) {
+                var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
+                for (i in p.vals()) {
+                    if (i != principal) {
+                        b.add(i);
+                    };
+                };
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(worldId), Text.equal, Buffer.toArray(b)).0;
+            };
+            case _ {};
+        };
+    };
+
+  //to update permissions of newly created userNodes
   public shared ({ caller }) func updateNodePermissions(key : Text, permissions : Trie.Trie<Text, Types.EntityPermission>) : async () {
     assert (isWorldHub_(caller));
     _permissions := Trie.put(_permissions, Utils.keyT(key), Text.equal, permissions).0;
+  };
+  public shared ({caller}) func updateAllNodeGlobalPermissions(permissions : Trie.Trie<Types.worldId, [Text]>) : async () {
+    assert(isWorldHub_(caller));
+    _globalPermissions := permissions;
   };
 };
