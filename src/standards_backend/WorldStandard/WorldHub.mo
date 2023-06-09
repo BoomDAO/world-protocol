@@ -48,7 +48,7 @@ actor WorldHub {
     private stable var _usernames : Trie.Trie<Text, Types.userId> = Trie.empty(); //mapping username -> _uid
     private stable var _nodes : [Types.nodeId] = []; //all user db canisters as nodes
     private stable var _admins : [Text] = ENV.admins; //admins for user db
-    private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "GameCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+    private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
     private stable var _globalPermissions : Trie.Trie<Types.worldId, [Types.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
     //Internals Functions
@@ -280,23 +280,23 @@ actor WorldHub {
         };
     };
 
-    //Game Canister Permission Rules
+    //world Canister Permission Rules
     //
     public shared ({ caller }) func addEntityPermission(entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
-        let gameId = Principal.toText(caller);
-        let k = gameId # "+" #entityId;
+        let worldId = Principal.toText(caller);
+        let k = worldId # "+" #entityId;
         _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
         for (i in _nodes.vals()) {
             let node = actor (i) : actor {
                 addEntityPermission : shared (Text, Text, Text, Types.EntityPermission) -> async ();
             };
-            await node.addEntityPermission(gameId, entityId, principal, permission);
+            await node.addEntityPermission(worldId, entityId, principal, permission);
         };
     };
 
     public shared ({ caller }) func removeEntityPermission(entityId : Text, principal : Text) : async () {
-        let gameId = Principal.toText(caller);
-        let k = gameId # "+" #entityId;
+        let worldId = Principal.toText(caller);
+        let k = worldId # "+" #entityId;
         switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
             case (?p) {
                 _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;
@@ -307,7 +307,7 @@ actor WorldHub {
             let node = actor (i) : actor {
                 removeEntityPermission : shared (Text, Text, Text) -> async ();
             };
-            await node.removeEntityPermission(gameId, entityId, principal);
+            await node.removeEntityPermission(worldId, entityId, principal);
         };
     };
 
