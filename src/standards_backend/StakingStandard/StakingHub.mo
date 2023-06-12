@@ -214,7 +214,7 @@ actor StakingHub {
           if (tt.from == from_ and tt.to == to_ and tt.amount == _amt) {
             return #ok("verified!");
           } else {
-            return #err("tx transfer details mismatch! "#Principal.toText(tt.from.owner)#" ||| "#Principal.toText(from_.owner)#" ||| "#Principal.toText(tt.to.owner)#" ||| "#Principal.toText(to_.owner)#" ||| "#Nat.toText(tt.amount)#" ||| "#Nat.toText(_amt));
+            return #err("tx transfer details mismatch! " #Principal.toText(tt.from.owner) # " ||| " #Principal.toText(from_.owner) # " ||| " #Principal.toText(tt.to.owner) # " ||| " #Principal.toText(to_.owner) # " ||| " #Nat.toText(tt.amount) # " ||| " #Nat.toText(_amt));
           };
         };
         case (null) {
@@ -401,7 +401,7 @@ actor StakingHub {
       updateStakes_(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id, null);
       return #Success("successfull");
     } else {
-      return #Err ("ledger query failed! " #(switch(res){case(#ok(result)){result};case(#err(result)){result}}));
+      return #Err("ledger query failed! " # (switch (res) { case (#ok(result)) { result }; case (#err(result)) { result } }));
     };
   };
 
@@ -425,6 +425,10 @@ actor StakingHub {
     let _of : Text = Principal.toText(msg.caller);
     switch (Trie.find(icp_stakes, Utils.keyT(_of), Text.equal)) {
       case (?s) {
+        let minimum_amount_to_withdraw : Nat64 = 100000000; //change it accordingly
+        if (s.amount < minimum_amount_to_withdraw) {
+          return #err("minimum ICP dissolvable is 1, you stake " #Nat64.toText(s.amount));
+        };
         icp_stakes := Trie.put(
           icp_stakes,
           Utils.keyT(_of),
@@ -449,6 +453,10 @@ actor StakingHub {
       case (?_trie) {
         switch (Trie.find(_trie, Utils.keyT(token_canister_id), Text.equal)) {
           case (?s) {
+            let minimum_amount_to_withdraw : Nat = 100; //adjust it accordingly
+            if (s.amount < minimum_amount_to_withdraw) {
+              return #err("minimum ICRC dissolvable is 100(with precision), you stake " #Nat.toText(s.amount));
+            };
             var t : Trie.Trie<Text, TStaking.ICRCStake> = _trie;
             t := Trie.put(
               t,
