@@ -353,4 +353,8 @@ actor WorldHub {
         };
     };
 
+    public shared ({caller}) func whoami() : async (Text) {
+        return Principal.toText(caller);
+    };
+
 };

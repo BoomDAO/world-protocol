@@ -15,297 +15,136 @@ import ENV "../utils/Env";
 import TDatabase "../types/world.types";
 import Nat64 "mo:base/Nat64";
 
-module{
+module {
     public type entityId = Text;
+    public type groupId = Text;
     public type worldId = Text;
-    public type userId = Text;
+
+    public type attribute = Text;
+
     public type nodeId = Text;
     // ================ CONFIGS ========================= //
-    type TokenConfig = 
-    {
-        name: Text;
-        description : Text; 
-        urlImg: Text; 
-        canister : Text;
-    };
-    type NftConfig = 
-    {
-        name: Text;
-        description : Text; 
-        urlImg: Text; 
-        canister : Text;
-        assetId: Text;
-        collection:  Text;
-        metadata: Text;
-    };
-    type StatConfig = 
-    {
-        name: Text;
-        description : Text; 
-        urlImg: Text; 
-        type_ : Text;
-    };
-    type ItemConfig = 
-    {
-        name: Text;
-        description : Text; 
-        urlImg: Text; 
-        tag : Text;
-        rarity: Text;
-    };
 
-    //Offer
-    type OfferConfig = 
-    {        
-        title: Text;
-        description: Text;
-        amount : Float;
+    public type EntityConfig = {
+        eid : Text;
+        gid : Text;
+        name : ?Text;
+        description : ?Text;
+        imageUrl : ?Text;
+        objectUrl : ?Text;
+        rarity : ?Text;
+        duration : ?Nat;
+        tag : Text;
+        metadata : Text;
     };
 
     //ActionResult
     public type quantity = Float;
     public type duration = Nat;
-    type CustomData = TDatabase.CustomData;
-    
-    public type UpdateStandardEntity = {
-        weight: Float;
-        update : {
-            #spendQuantity : (
+
+    public type MintToken = {
+        name : Text;
+        description : Text;
+        imageUrl : Text;
+        canister : Text;
+    };
+    public type MintNft = {
+        name : Text;
+        description : Text;
+        imageUrl : Text;
+        canister : Text;
+        assetId : Text;
+        collection : Text;
+        metadata : Text;
+    };
+    public type ActionOutcomeOption = {
+        weight : Float;
+        option : {
+            #mintToken : MintToken;
+            #mintNft : MintNft;
+            #setEntityAttribute : (
                 worldId,
+                groupId,
                 entityId,
-                quantity
+                attribute,
             );
-            #receiveQuantity : (
+            #spendEntityQuantity : (
                 worldId,
+                groupId,
                 entityId,
-                quantity
+                quantity,
             );
-            #renewExpiration : (
+            #receiveEntityQuantity : (
                 worldId,
+                groupId,
                 entityId,
-                duration
+                quantity,
             );
-            #reduceExpiration : (
+            #renewEntityExpiration : (
                 worldId,
+                groupId,
                 entityId,
-                duration
+                duration,
+            );
+            #reduceEntityExpiration : (
+                worldId,
+                groupId,
+                entityId,
+                duration,
             );
             #deleteEntity : (
                 worldId,
-                entityId
+                groupId,
+                entityId,
+                entityId,
             );
-        }
+        };
     };
-    public type UpdateCustomEntity = {
-        weight: Float;
-        setCustomData : ?(worldId, entityId, CustomData);
-    };
-    public type ActionOutcomeOption = {
-        #standard : UpdateStandardEntity;
-        #custom : UpdateCustomEntity;
-    };
+
     public type ActionOutcome = {
-        possibleOutcomes: [ActionOutcomeOption];
+        possibleOutcomes : [ActionOutcomeOption];
     };
     public type ActionResult = {
-        outcomes: [ActionOutcome];
+        outcomes : [ActionOutcome];
     };
 
     //ActionConfig
-    public type ActionArg = 
-    {
-        #burnNft : {actionId: Text; index: Nat32; aid: Text};
-        #spendTokens : {actionId: Text; hash: Nat64;  toPrincipal : Text; };
-        #spendEntities : {actionId: Text; };
-        #claimStakingReward : {actionId: Text; tokenCanister: Text; };
+    public type ActionArg = {
+        #burnNft : { actionId : Text; index : Nat32; aid : Text };
+        #spendTokens : { actionId : Text; hash : Nat64; toPrincipal : Text };
+        #spendEntities : { actionId : Text };
+        #claimStakingReward : { actionId : Text };
     };
 
-    public type ActionDataType = 
-    {
-        #burnNft : {nftCanister: Text;};
-        #spendTokens : {tokenCanister: ? Text; amt: Float; };
+    public type ActionDataType = {
+        #burnNft : { nftCanister : Text };
+        #spendTokens : { tokenCanister : ?Text; amt : Float };
         #spendEntities : {};
-        #claimStakingReward : { requiredAmount : Nat };
+        #claimStakingReward : { requiredAmount : Nat; tokenCanister : Text };
     };
-    public type ActionConstraint = 
-    {
-        #timeConstraint: { intervalDuration: Nat; actionsPerInterval: Nat; };
-        #entityConstraint : { entityId: Text; greaterThan: ?Float; lessThan: ?Float; };
+    public type ActionConstraint = {
+        #timeConstraint : { intervalDuration : Nat; actionsPerInterval : Nat };
+        #entityConstraint : {
+            worldId : Text;
+            groupId : Text;
+            entityId : Text;
+            equalToAttribute : ?Text;
+            greaterThanOrEqualQuantity : ?Float;
+            lessThanQuantity : ?Float;
+            notExpired : ?Bool;
+        };
     };
-    public type ActionConfig = 
-    {
-        actionDataType: ActionDataType;
-        actionResult: ActionResult;
-        actionConstraints: ?[ActionConstraint];
+    public type ActionConfig = {
+        aid : Text;
+        name : ?Text;
+        description : ?Text;
+        actionDataType : ActionDataType;
+        actionResult : ActionResult;
+        actionConstraints : ?[ActionConstraint];
     };
 
     //ConfigDataType
-    public type ConfigDataType = {
-        #token : TokenConfig;
-        #nft : NftConfig;
-        #stat : StatConfig;
-        #item : ItemConfig;
-        #offer : OfferConfig;
-        #action : ActionConfig;
-    };
 
-    public type EntityConfig = {
-        eid : Text;
-        configDataType : ConfigDataType;
-    };
-    
-    public type Configs = [EntityConfig]; 
-    
-        public let configs : Configs = [
-        //TOKENS
-        { 
-            eid = "token_test";
-            configDataType = #token { name = "Token Test"; description = "This is a test token"; urlImg = ""; canister = ENV.ICRC1_Ledger }
-        },
-        
-        //NFTS
-        { 
-            eid = "pastry_reward"; 
-            configDataType = #nft { name = "Pastry Reward"; description = "Burn it to mint an Pastry Nft"; urlImg = ""; canister = "jh775-jaaaa-aaaal-qbuda-cai"; assetId = "0"; collection = "Plethora Items"; metadata = "" }
-        },
-        
-        //ITEMS
-        { 
-            eid = "pastry_candy_cake"; 
-            configDataType = #item { name = "Thicc Boy"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        { 
-            eid = "pastry_candy_candy"; configDataType = #item { name = "The Candy Emperor"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        { 
-            eid = "pastry_candy_croissant"; 
-            configDataType = #item { name = "Le Frenchy"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        { 
-            eid = "pastry_candy_cupcake"; 
-            configDataType = #item { name = "Princess Sweet Cheeks"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        { 
-            eid = "pastry_candy_donut"; 
-            configDataType = #item { name = " Donyatsu"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        { 
-            eid = "pastry_candy_ice_cream"; 
-            configDataType = #item { name = "Prince Yummy Buddy"; description = "just an item"; urlImg = ""; tag = ""; rarity = "rare"; }
-        },
-        { 
-            eid = "pastry_candy_marshmallow"; 
-            configDataType = #item { name = "Sugar Baby"; description = "just an item"; urlImg = ""; tag = ""; rarity = "rare"; }
-        },
-        { 
-            eid = "pastry_candy_chocolate"; 
-            configDataType = #item { name = "Sir Chocobro"; description = "just an item"; urlImg = ""; tag = ""; rarity = "special"; }
-        },
-
-        { 
-            eid = "item1"; 
-            configDataType = #item { name = "Item 1"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        { 
-            eid = "item2"; 
-            configDataType = #item { name = "Item 2"; description = "just an item"; urlImg = ""; tag = ""; rarity = "common"; }
-        },
-        
-        //OFFERS
-        { 
-            eid = "test_item_ic";
-            configDataType = #offer {
-            title = "test_item_ic";
-            description = "test_item_ic";
-            amount = 0.0001;
-            }
-        },
-        
-        //ACTIONS
-        { 
-            eid = "burnPastryRewardAction";
-            configDataType = #action {
-                actionDataType = #burnNft { nftCanister = ""; };
-                actionResult = { 
-                    outcomes = [
-                        {
-                            possibleOutcomes = [
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_cake", 1);  weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_candy", 1); weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_chocolate", 1);  weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_croissant", 1);  weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_cupcake", 1);  weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_donut", 1);  weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_ice_cream", 1);  weight = 100;},
-                                #standard { update = #receiveQuantity ("game", "pastry_candy_marshmallow", 1);  weight = 100;},
-                            ]
-                        }
-                    ]
-                };
-                actionConstraints = ? [
-                    #timeConstraint { intervalDuration = 120_000_000_000; actionsPerInterval = 1; }
-                ];
-            }
-        },
-        { 
-            eid = "buyItem1_Icp";
-            configDataType = #action {
-                actionDataType =  #spendTokens { tokenCanister =  null; amt = 0.0001; };
-                actionResult = { 
-                    outcomes = [
-                        {
-                            possibleOutcomes = [
-                                #standard { update = #receiveQuantity ("game", "item1", 1); weight = 100;},
-                            ]
-                        }
-                    ]
-                };
-                actionConstraints = ? [
-                    #timeConstraint { intervalDuration = 120_000_000_000; actionsPerInterval = 1; }
-                ];
-            }
-        },
-        { 
-            eid = "buyItem2_Icrc";
-            configDataType = #action {
-                actionDataType =  #spendTokens { tokenCanister = ? ENV.ICRC1_Ledger; amt = 0.0001; };
-                actionResult = { 
-                    outcomes = [
-                        {
-                            possibleOutcomes = [
-                                #standard { update = #receiveQuantity ("game", "item2", 1); weight = 100;},
-                            ]
-                        }
-                    ]
-                };
-                actionConstraints = ? [
-                    #timeConstraint { intervalDuration = 120_000_000_000; actionsPerInterval = 1; }
-                ];
-            }
-        },
-        { 
-            eid = "buyItem2_item1";
-            configDataType = #action {
-                actionDataType =  #spendEntities {};
-                actionResult = { 
-                    outcomes = [
-                        {//Substract
-                            possibleOutcomes = [
-                                #standard { update = #spendQuantity ("game", "item2", 1); weight = 100;},
-                            ]
-                        },
-                        {//Add
-                            possibleOutcomes = [
-                                #standard { update = #receiveQuantity ("game", "item1", 1); weight = 100;},
-                            ]
-                        }
-                    ]
-                };
-                actionConstraints = ? [
-                    #timeConstraint { intervalDuration = 120_000_000_000; actionsPerInterval = 1; }
-                ];
-            }
-        },
-        // add more items here...
-    ];
-}
+    public type EntityConfigs = [EntityConfig];
+    public type ActionConfigs = [ActionConfig];
+};

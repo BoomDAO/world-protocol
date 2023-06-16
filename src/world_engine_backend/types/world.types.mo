@@ -30,25 +30,20 @@ import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
 module {
-    public type entityId = Text;
-    public type worldId = Text;
     public type userId = Text;
-    public type nodeId = Text;
+    public type worldId = Text;
+    public type groupId = Text;
+    public type entityId = Text;
     public type actionId = Text;
+    public type nodeId = Text;
 
     public type Entity = {
         eid : Text;
+        gid : Text;
         wid : Text;
-        data : {
-            #standard : {
-                quantity : ?Float;
-                expiration : ?Nat;
-            };
-            #custom : CustomData;
-        };
-    };
-    public type CustomData = {
-        #action : Action
+        attribute : ?Text;
+        quantity : ?Float;
+        expiration : ?Nat;
     };
     public type Action = {
         intervalStartTs : Nat;
