@@ -14,8 +14,9 @@ import Int "mo:base/Int";
 import ENV "../utils/Env";
 import TDatabase "../types/world.types";
 import Nat64 "mo:base/Nat64";
+import Debug "mo:base/Debug";
 
-module {
+module{
     public type entityId = Text;
     public type groupId = Text;
     public type worldId = Text;
@@ -25,126 +26,122 @@ module {
     public type nodeId = Text;
     // ================ CONFIGS ========================= //
 
-    public type EntityConfig = {
-        eid : Text;
-        gid : Text;
-        name : ?Text;
-        description : ?Text;
-        imageUrl : ?Text;
-        objectUrl : ?Text;
-        rarity : ?Text;
-        duration : ?Nat;
-        tag : Text;
-        metadata : Text;
+    public type EntityConfig = 
+    {
+        eid: Text;
+        gid: Text;
+        name: ?Text;
+        description: ?Text;
+        imageUrl: ?Text;
+        objectUrl: ?Text;
+        rarity: ?Text;
+        duration: ?Nat;
+        tag: Text;
+        metadata: Text;
     };
 
     //ActionResult
     public type quantity = Float;
     public type duration = Nat;
-
+    
     public type MintToken = {
-        name : Text;
-        description : Text;
-        imageUrl : Text;
+        name: Text;
+        description : Text; 
+        imageUrl: Text; 
         canister : Text;
     };
     public type MintNft = {
-        name : Text;
-        description : Text;
-        imageUrl : Text;
+        name: Text;
+        description : Text; 
+        imageUrl: Text; 
         canister : Text;
-        assetId : Text;
-        collection : Text;
-        metadata : Text;
+        assetId: Text;
+        collection:  Text;
+        metadata: Text;
     };
     public type ActionOutcomeOption = {
-        weight : Float;
+        weight: Float;
         option : {
             #mintToken : MintToken;
             #mintNft : MintNft;
             #setEntityAttribute : (
-                worldId,
-                groupId,
                 entityId,
-                attribute,
+                groupId,
+                worldId,
+                attribute
             );
             #spendEntityQuantity : (
-                worldId,
-                groupId,
                 entityId,
-                quantity,
+                groupId,
+                worldId,
+                quantity
             );
             #receiveEntityQuantity : (
-                worldId,
-                groupId,
                 entityId,
-                quantity,
+                groupId,
+                worldId,
+                quantity
             );
             #renewEntityExpiration : (
-                worldId,
-                groupId,
                 entityId,
-                duration,
+                groupId,
+                worldId,
+                duration
             );
             #reduceEntityExpiration : (
-                worldId,
-                groupId,
                 entityId,
-                duration,
+                groupId,
+                worldId,
+                duration
             );
             #deleteEntity : (
-                worldId,
+                entityId,
                 groupId,
-                entityId,
-                entityId,
+                worldId,
+                entityId
             );
-        };
+        }
     };
-
     public type ActionOutcome = {
-        possibleOutcomes : [ActionOutcomeOption];
+        possibleOutcomes: [ActionOutcomeOption];
     };
     public type ActionResult = {
-        outcomes : [ActionOutcome];
+        outcomes: [ActionOutcome];
     };
 
     //ActionConfig
-    public type ActionArg = {
-        #burnNft : { actionId : Text; index : Nat32; aid : Text };
-        #spendTokens : { actionId : Text; hash : Nat64; toPrincipal : Text };
-        #spendEntities : { actionId : Text };
-        #claimStakingReward : { actionId : Text };
+    public type ActionArg = 
+    {
+        #burnNft : {actionId: Text; index: Nat32; aid: Text};
+        #spendTokens : {actionId: Text; hash: Nat64; };
+        #spendEntities : {actionId: Text; };
+        #claimStakingReward : {actionId: Text; };
     };
 
-    public type ActionDataType = {
-        #burnNft : { nftCanister : Text };
-        #spendTokens : { tokenCanister : ?Text; amt : Float };
+    public type ActionDataType = 
+    {
+        #burnNft : {nftCanister: Text;};
+        #spendTokens : {tokenCanister: ? Text; amt: Float; baseZeroCount: Nat; toPrincipal : Text; };
         #spendEntities : {};
-        #claimStakingReward : { requiredAmount : Nat; tokenCanister : Text };
+        #claimStakingReward : { requiredAmount : Nat; tokenCanister: Text; };
     };
-    public type ActionConstraint = {
-        #timeConstraint : { intervalDuration : Nat; actionsPerInterval : Nat };
-        #entityConstraint : {
-            worldId : Text;
-            groupId : Text;
-            entityId : Text;
-            equalToAttribute : ?Text;
-            greaterThanOrEqualQuantity : ?Float;
-            lessThanQuantity : ?Float;
-            notExpired : ?Bool;
-        };
+    public type ActionConstraint = 
+    {
+        #timeConstraint: { intervalDuration: Nat; actionsPerInterval: Nat; };
+        #entityConstraint : { worldId: Text; groupId: Text; entityId: Text; equalToAttribute: ?Text; greaterThanOrEqualQuantity: ?Float; lessThanQuantity: ?Float; notExpired: ?Bool};
     };
-    public type ActionConfig = {
+    public type ActionConfig = 
+    {
         aid : Text;
         name : ?Text;
         description : ?Text;
-        actionDataType : ActionDataType;
-        actionResult : ActionResult;
-        actionConstraints : ?[ActionConstraint];
+        actionDataType: ActionDataType;
+        actionResult: ActionResult;
+        actionConstraints: ?[ActionConstraint];
     };
 
     //ConfigDataType
 
-    public type EntityConfigs = [EntityConfig];
-    public type ActionConfigs = [ActionConfig];
-};
+    public type EntityConfigs = [EntityConfig]; 
+    public type ActionConfigs = [ActionConfig]; 
+}

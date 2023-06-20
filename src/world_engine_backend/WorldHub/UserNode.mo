@@ -41,7 +41,7 @@ actor class UserNode() {
   // stable memory
   private stable var _entities : Trie.Trie<Types.userId, Trie.Trie<Types.worldId, Trie.Trie<Types.groupId, Trie.Trie<Types.entityId, Types.Entity>>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [groupId -> [entities]]]]
   private stable var _actions : Trie.Trie<Types.userId, Trie.Trie<Types.worldId, Trie.Trie<Types.actionId, Types.Action>>> = Trie.empty();
-  private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "WorldCanisterId + / + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+  private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<Types.worldId, [Types.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
   // Internal functions
@@ -111,7 +111,7 @@ actor class UserNode() {
     };
   };
 
-  private func isPermitted_(worldId : Text, entityId : Text, principal : Text) : (Bool) {
+  private func isPermitted_(worldId : Text, groupId : Text, entityId : Text, principal : Text) : (Bool) {
     //check if globally permitted
     switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
       case (?p) {
@@ -124,7 +124,7 @@ actor class UserNode() {
       case _ {};
     };
 
-    let k = worldId # "+" #entityId;
+    let k = worldId # "+" #groupId #"+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         switch (Trie.find(p, Utils.keyT(principal), Text.equal)) {
@@ -331,7 +331,7 @@ actor class UserNode() {
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#spendEntityQuantity sq) {
-          if (isPermitted_(sq.0, sq.1, Principal.toText(caller)) == false) {
+          if (isPermitted_(sq.2, sq.1, sq.0, Principal.toText(caller)) == false) {
             return #err("caller not authorized to processActionEntities");
           };
           var _entity = getEntity_(uid, sq.0, sq.1, sq.2);
@@ -349,17 +349,17 @@ actor class UserNode() {
           };
         };
         case (#receiveEntityQuantity rq) {
-          if (isPermitted_(rq.0, rq.1, Principal.toText(caller)) == false) {
+          if (isPermitted_(rq.2, rq.1, rq.0, Principal.toText(caller)) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#renewEntityExpiration re) {
-          if (isPermitted_(re.0, re.1, Principal.toText(caller)) == false) {
+          if (isPermitted_(re.2, re.1, re.0, Principal.toText(caller)) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#reduceEntityExpiration re) {
-          if (isPermitted_(re.0, re.1, Principal.toText(caller)) == false) {
+          if (isPermitted_(re.2, re.1, re.0, Principal.toText(caller)) == false) {
             return #err("caller not authorized to processActionEntities");
           };
           var _entity = getEntity_(uid, re.0, re.1, re.2);
@@ -375,7 +375,7 @@ actor class UserNode() {
           };
         };
         case (#deleteEntity de) {
-          if (isPermitted_(de.0, de.1, Principal.toText(caller)) == false) {
+          if (isPermitted_(de.2, de.1, de.0, Principal.toText(caller)) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
@@ -547,7 +547,7 @@ actor class UserNode() {
   public shared ({ caller }) func manuallyOverwriteEntities(uid : Types.userId, wid : Types.worldId, gid : Types.groupId, entities : [Types.Entity]) : async (Result.Result<[Types.Entity], Text>) {
     assert (Principal.toText(caller) == wid);
     for (entity in entities.vals()) {
-      if (isPermitted_(entity.wid, entity.eid, Principal.toText(caller)) == false) {
+      if (isPermitted_(entity.wid, entity.gid, entity.eid, Principal.toText(caller)) == false) {
         return #err("caller not authorized to update entities");
       };
     };
@@ -628,15 +628,15 @@ actor class UserNode() {
 
   //World Canister Permission Rules
   //
-  public shared ({ caller }) func addEntityPermission(worldId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
+  public shared ({ caller }) func addEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
     assert (isWorldHub_(caller));
-    let k = worldId # "+" #entityId;
+    let k = worldId # "+" #groupId #"+" #entityId;
     _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
   };
 
-  public shared ({ caller }) func removeEntityPermission(worldId : Text, entityId : Text, principal : Text) : async () {
+  public shared ({ caller }) func removeEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text) : async () {
     assert (isWorldHub_(caller));
-    let k = worldId # "+" #entityId;
+    let k = worldId # "+" #groupId #"+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;
