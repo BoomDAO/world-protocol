@@ -4,7 +4,7 @@
 
 ## WORLD ENGINE
 
-A comprehensive, fully on-chain **World Engine** that provides a universal game-centric database, modular game logic, composable data standards, and customizable access control for interactions across game worlds. All worlds built with the World Engine are interoperable from Day 1. Plus, it comes packed with NFT/ICP/ICRC payments, staking, minting, and burning features.
+A comprehensive, fully on-chain **World Engine** that provides a universal game-centric database, modular game logic, composable data standards, and customizable access control for interactions across game worlds. All worlds built with the World Engine are interoperable from Day 1. It's further enriched with functionalities for NFT/ICP/ICRC payments, staking, minting, and burning.
 
 The World Engine has 3 separate services:
 
