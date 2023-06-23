@@ -17,15 +17,7 @@ import Nat64 "mo:base/Nat64";
 import Debug "mo:base/Debug";
 
 module{
-    public type entityId = Text;
-    public type groupId = Text;
-    public type worldId = Text;
-
-    public type attribute = Text;
-
-    public type nodeId = Text;
     // ================ CONFIGS ========================= //
-
     public type EntityConfig = 
     {
         eid: Text;
@@ -41,16 +33,23 @@ module{
     };
 
     //ActionResult
+    public type entityId = Text;
+    public type groupId = Text;
+    public type worldId = ?Text;
+
+    public type attribute = Text;
     public type quantity = Float;
     public type duration = Nat;
     
-    public type MintToken = {
+    public type MintToken = 
+    {
         name: Text;
         description : Text; 
         imageUrl: Text; 
         canister : Text;
     };
-    public type MintNft = {
+    public type MintNft = 
+    {
         name: Text;
         description : Text; 
         imageUrl: Text; 
@@ -65,39 +64,38 @@ module{
             #mintToken : MintToken;
             #mintNft : MintNft;
             #setEntityAttribute : (
-                entityId,
-                groupId,
                 worldId,
+                groupId,
+                entityId,
                 attribute
             );
             #spendEntityQuantity : (
-                entityId,
-                groupId,
                 worldId,
+                groupId,
+                entityId,
                 quantity
             );
             #receiveEntityQuantity : (
-                entityId,
-                groupId,
                 worldId,
+                groupId,
+                entityId,
                 quantity
             );
             #renewEntityExpiration : (
-                entityId,
-                groupId,
                 worldId,
+                groupId,
+                entityId,
                 duration
             );
             #reduceEntityExpiration : (
-                entityId,
-                groupId,
                 worldId,
+                groupId,
+                entityId,
                 duration
             );
             #deleteEntity : (
-                entityId,
-                groupId,
                 worldId,
+                groupId,
                 entityId
             );
         }
@@ -112,32 +110,43 @@ module{
     //ActionConfig
     public type ActionArg = 
     {
+        #default : {actionId: Text; };
         #burnNft : {actionId: Text; index: Nat32; aid: Text};
         #spendTokens : {actionId: Text; hash: Nat64; };
-        #spendEntities : {actionId: Text; };
         #claimStakingReward : {actionId: Text; };
     };
 
-    public type ActionDataType = 
+    public type ActionPlugin = 
     {
         #burnNft : {nftCanister: Text;};
-        #spendTokens : {tokenCanister: ? Text; amt: Float; baseZeroCount: Nat; toPrincipal : Text; };
-        #spendEntities : {};
+        #spendTokens : {tokenCanister: ? Text; amt: Float; baseZeroCount: Nat;  toPrincipal : Text; };
         #claimStakingReward : { requiredAmount : Nat; tokenCanister: Text; };
     };
     public type ActionConstraint = 
     {
-        #timeConstraint: { intervalDuration: Nat; actionsPerInterval: Nat; };
-        #entityConstraint : { worldId: Text; groupId: Text; entityId: Text; equalToAttribute: ?Text; greaterThanOrEqualQuantity: ?Float; lessThanQuantity: ?Float; notExpired: ?Bool};
+        timeConstraint: ? {
+            intervalDuration: Nat; 
+            actionsPerInterval: Nat; 
+        };
+        entityConstraint : ? [{ 
+            worldId: Text; 
+            groupId: Text; 
+            entityId: Text; 
+            equalToAttribute: ?Text; 
+            greaterThanOrEqualQuantity: ?Float; 
+            lessThanQuantity: ?Float; 
+            notExpired: ?Bool
+        }];
     };
     public type ActionConfig = 
     {
         aid : Text;
         name : ?Text;
         description : ?Text;
-        actionDataType: ActionDataType;
+        tag : ?Text;
+        actionPlugin: ?ActionPlugin;
+        actionConstraint: ?ActionConstraint;
         actionResult: ActionResult;
-        actionConstraints: ?[ActionConstraint];
     };
 
     //ConfigDataType

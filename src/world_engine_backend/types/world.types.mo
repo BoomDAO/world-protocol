@@ -49,10 +49,21 @@ module {
         intervalStartTs : Nat;
         actionCount : Nat;
     };
-    public type EntityPermission = {
-        #spendQuantityCap: { intervalDuration: Nat; capPerInterval: Float; };
-        #receiveQuantityCap : { intervalDuration: Nat; capPerInterval: Float; };
-        #renewExpirationCap : { intervalDuration: Nat; capPerInterval: Nat; };
-        #reduceExpirationCap : { intervalDuration: Nat; capPerInterval: Nat; };
+    public type MintToken = {
+        name : Text;
+        description : Text;
+        imageUrl : Text;
+        canister : Text;
     };
+    public type MintNft = {
+        name : Text;
+        description : Text;
+        imageUrl : Text;
+        canister : Text;
+        assetId : Text;
+        collection : Text;
+        metadata : Text;
+    };
+    public type EntityPermission = {};
+    public type Response = (Action, [Entity], [MintNft], [MintToken]);
 };

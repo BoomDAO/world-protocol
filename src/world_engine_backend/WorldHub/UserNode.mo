@@ -112,6 +112,7 @@ actor class UserNode() {
   };
 
   private func isPermitted_(worldId : Text, groupId : Text, entityId : Text, principal : Text) : (Bool) {
+    if(worldId == principal) return true;
     //check if globally permitted
     switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
       case (?p) {
@@ -238,7 +239,6 @@ actor class UserNode() {
   };
 
   private func validateActionEntityConfig_(uid : Types.userId, wid : Types.worldId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Action, Text>) {
-    var constraints = Option.get(actionConfig.actionConstraints, []);
     var action : ?Types.Action = getAction_(uid, wid, aid);
     var new_action : ?Types.Action = action;
     var _intervalStartTs : Nat = 0;
@@ -253,26 +253,30 @@ actor class UserNode() {
       };
       case _ {};
     };
-
-    for (c in constraints.vals()) {
-      switch (c) {
-        case (#timeConstraint t) {
-          //intervalDuration is expected example (24hrs in nanoseconds)
-          if (t.actionsPerInterval == 0) {
-            return #err("actionsPerInterval limit is set to 0 so the action cannot be done");
+    switch(actionConfig.actionConstraint) {
+      case (?constraints) {
+        switch (constraints.timeConstraint) {
+          case (?t) {
+            //intervalDuration is expected example (24hrs in nanoseconds)
+            if (t.actionsPerInterval == 0) {
+              return #err("actionsPerInterval limit is set to 0 so the action cannot be done");
+            };
+            if ((_intervalStartTs + t.intervalDuration < Time.now())) {
+              let t : Text = Int.toText(Time.now());
+              let time : Nat = Utils.textToNat(t);
+              _intervalStartTs := time;
+              _actionCount := 1;
+            } else if (_actionCount < t.actionsPerInterval) {
+              _actionCount := _actionCount + 1;
+            } else {
+              return #err("actionCount has already reached actionsPerInterval limit for this time interval");
+            };
           };
-          if ((_intervalStartTs + t.intervalDuration < Time.now())) {
-            let t : Text = Int.toText(Time.now());
-            let time : Nat = Utils.textToNat(t);
-            _intervalStartTs := time;
-            _actionCount := 1;
-          } else if (_actionCount < t.actionsPerInterval) {
-            _actionCount := _actionCount + 1;
-          } else {
-            return #err("actionCount has already reached actionsPerInterval limit for this time interval");
-          };
+          case _ {};
         };
-        case (#entityConstraint e) {
+
+        var entityConstraints = Option.get(constraints.entityConstraint, []);
+        for (e in entityConstraints.vals()) {
           let _greaterThan : Float = Option.get(e.greaterThanOrEqualQuantity, 0.0);
           let _lessThan : Float = Option.get(e.lessThanQuantity, 0.0);
           switch (getEntity_(uid, e.worldId, e.groupId, e.entityId)) {
@@ -315,6 +319,7 @@ actor class UserNode() {
           };
         };
       };
+      case _ {};
     };
 
     let a : Types.Action = {
@@ -324,17 +329,18 @@ actor class UserNode() {
     return #ok(a);
   };
 
-  public shared ({ caller }) func processActionEntities(uid : Types.userId, wid : Types.worldId, gid : Types.groupId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<[Types.Entity], Text>) {
-    assert (wid == Principal.toText(caller));
+  public shared ({ caller }) func processActionEntities(uid : Types.userId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Response, Text>) {
+    let wid = Principal.toText(caller);
     let outcomes : [Config.ActionOutcomeOption] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#spendEntityQuantity sq) {
-          if (isPermitted_(sq.2, sq.1, sq.0, Principal.toText(caller)) == false) {
+          let entityWid = switch(sq.0) { case(? value){value}; case(_){wid} };
+          if (isPermitted_(entityWid, sq.1, sq.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
-          var _entity = getEntity_(uid, sq.0, sq.1, sq.2);
+          var _entity = getEntity_(uid, entityWid, sq.1, sq.2);
           switch (_entity) {
             case (?entity) {
               var _quantity = 0.0;
@@ -349,20 +355,23 @@ actor class UserNode() {
           };
         };
         case (#receiveEntityQuantity rq) {
-          if (isPermitted_(rq.2, rq.1, rq.0, Principal.toText(caller)) == false) {
+          let entityWid = switch(rq.0) { case(? value){value}; case(_){wid} };
+          if (isPermitted_(entityWid, rq.1, rq.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#renewEntityExpiration re) {
-          if (isPermitted_(re.2, re.1, re.0, Principal.toText(caller)) == false) {
+          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          if (isPermitted_(entityWid, re.1, re.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#reduceEntityExpiration re) {
-          if (isPermitted_(re.2, re.1, re.0, Principal.toText(caller)) == false) {
+          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          if (isPermitted_(entityWid, re.1, re.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
-          var _entity = getEntity_(uid, re.0, re.1, re.2);
+          var _entity = getEntity_(uid, entityWid, re.1, re.2);
           switch (_entity) {
             case (?entity) {
               var _expiration = 0;
@@ -375,34 +384,23 @@ actor class UserNode() {
           };
         };
         case (#deleteEntity de) {
-          if (isPermitted_(de.2, de.1, de.0, Principal.toText(caller)) == false) {
+          let entityWid = switch(de.0) { case(? value){value}; case(_){wid} };
+          if (isPermitted_(entityWid, de.1, de.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
-        case (#setEntityAttribute sa) {
-
-        };
+        case (#setEntityAttribute sa) {};
         case _ {};
       };
     };
 
     var b = Buffer.Buffer<Types.Entity>(0);
-    //response = ( Action, [Entity], [MintToken], [MintNft] )
-    var response = (
-      [],
-      {
-        intervalStartTs = 0;
-        actionCount = 0;
-      },
-      [],
-      [],
-    );
+    var response : Types.Response = ({intervalStartTs = 0; actionCount = 0;}, [], [], []);
     let isActionConfigValid = await validateActionEntityConfig_(uid, wid, aid, actionConfig);
     switch (isActionConfigValid) {
       case (#ok a) {
         _actions := Trie.put3D(_actions, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
-        // TODO:
-        response := ([], a, [], []);
+        response := (a, [], [], []);
       };
       case (#err _) {
         return #err("actionConfig not valid");
@@ -413,7 +411,8 @@ actor class UserNode() {
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#receiveEntityQuantity rq) {
-          var _entity = getEntity_(uid, rq.0, rq.1, rq.2);
+          let entityWid = switch(rq.0) { case(? value){value}; case(_){wid} };
+          var _entity = getEntity_(uid, entityWid, rq.1, rq.2);
           switch (_entity) {
             case (?entity) {
               var _quantity = 0.0;
@@ -434,19 +433,20 @@ actor class UserNode() {
             case _ {
               var new_entity : Types.Entity = {
                 eid = rq.2;
-                wid = rq.0;
+                wid = entityWid;
                 gid = rq.1;
                 quantity = ?(rq.3);
                 expiration = null; //Here we will update code for expiration TODO:
                 attribute = null;
               };
-              _entities := entityPut4D_(_entities, uid, rq.0, rq.1, rq.2, new_entity);
+              _entities := entityPut4D_(_entities, uid, entityWid, rq.1, rq.2, new_entity);
               b.add(new_entity);
             };
           };
         };
         case (#spendEntityQuantity dq) {
-          var _entity = getEntity_(uid, dq.0, dq.1, dq.2);
+          let entityWid = switch(dq.0) { case(? value){value}; case(_){wid} };
+          var _entity = getEntity_(uid, entityWid, dq.1, dq.2);
           switch (_entity) {
             case (?entity) {
               var _quantity = 0.0;
@@ -468,7 +468,8 @@ actor class UserNode() {
           };
         };
         case (#renewEntityExpiration re) {
-          var _entity = getEntity_(uid, re.0, re.1, re.2);
+          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          var _entity = getEntity_(uid, entityWid, re.1, re.2);
           switch (_entity) {
             case (?entity) {
               var _expiration = 0;
@@ -498,7 +499,8 @@ actor class UserNode() {
           };
         };
         case (#reduceEntityExpiration re) {
-          var _entity = getEntity_(uid, re.0, re.1, re.2);
+          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          var _entity = getEntity_(uid, entityWid, re.1, re.2);
           switch (_entity) {
             case (?entity) {
               var _expiration = 0;
@@ -518,10 +520,12 @@ actor class UserNode() {
           };
         };
         case (#deleteEntity de) {
-          _entities := entityRemove4D_(_entities, uid, de.0, de.1, de.2);
+          let entityWid = switch(de.0) { case(? value){value}; case(_){wid} };
+          _entities := entityRemove4D_(_entities, uid, entityWid, de.1, de.2);
         };
         case (#setEntityAttribute sa) {
-          var _entity = getEntity_(uid, sa.0, sa.1, sa.2);
+          let entityWid = switch(sa.0) { case(? value){value}; case(_){wid} };
+          var _entity = getEntity_(uid, entityWid, sa.1, sa.2);
           switch (_entity) {
             case (?entity) {
               var new_entity : Types.Entity = {
@@ -541,13 +545,14 @@ actor class UserNode() {
         case _ {};
       };
     };
-    return #ok(Buffer.toArray(b));
+    response := (response.0, Buffer.toArray(b), [], []);
+    return #ok(response);
   };
 
-  public shared ({ caller }) func manuallyOverwriteEntities(uid : Types.userId, wid : Types.worldId, gid : Types.groupId, entities : [Types.Entity]) : async (Result.Result<[Types.Entity], Text>) {
-    assert (Principal.toText(caller) == wid);
+  public shared ({ caller }) func manuallyOverwriteEntities(uid : Types.userId, gid : Types.groupId, entities : [Types.Entity]) : async (Result.Result<[Types.Entity], Text>) {
+    let wid = Principal.toText(caller);
     for (entity in entities.vals()) {
-      if (isPermitted_(entity.wid, entity.gid, entity.eid, Principal.toText(caller)) == false) {
+      if (isPermitted_(entity.wid, entity.gid, entity.eid, wid) == false) {
         return #err("caller not authorized to update entities");
       };
     };
