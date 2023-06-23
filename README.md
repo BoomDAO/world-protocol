@@ -9,7 +9,9 @@ A comprehensive, fully on-chain **World Engine** that provides a universal game-
 The World Engine has 3 separate services:
 
 **WorldHub**: A shared universal game database and access control manager that connects all game Worlds on the Internet Computer.
+
 **PaymentHub**: A shared service for handling payments of ICP/ICRC/NFTs in-game. 
+
 **StakingHub**: A shared service for handling staking of ICP/ICRC/NFTs in-game. 
 
 ## TECH DOCUMENTATION
