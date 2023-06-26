@@ -213,7 +213,7 @@ actor PaymentHub {
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcrc(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (ICP.Response) {
-    assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
+    //assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
     assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
     var res : Result.Result<Text, Text> = await queryIcrcTx_(index, _to, _from, _amt, token_canister_id);
     if (res == #ok("verified!")) {

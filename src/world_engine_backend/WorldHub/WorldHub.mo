@@ -109,18 +109,18 @@ actor WorldHub {
         return false;
     };
 
-    private func updateAllNodePermissions_(canister_id : Text) : async () {
+    private func updateGlobalPermissions_(canister_id : Text) : async () {
         for ((_key, _permission) in Trie.iter(_permissions)) {
             let node = actor (canister_id) : actor {
-                updateNodePermissions : shared (Text, Trie.Trie<Text, Types.EntityPermission>) -> async ();
-                updateAllNodeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
+                synchronizeEntityPermissions : shared (Text, Trie.Trie<Text, Types.EntityPermission>) -> async ();
+                synchronizeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
             };
-            await node.updateNodePermissions(_key, _permission);
+            await node.synchronizeEntityPermissions(_key, _permission);
         };
         let node = actor (canister_id) : actor {
-            updateAllNodeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
+            synchronizeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
         };
-        await node.updateAllNodeGlobalPermissions(_globalPermissions);
+        await node.synchronizeGlobalPermissions(_globalPermissions);
     };
 
     //Queries
@@ -215,7 +215,7 @@ actor WorldHub {
                     adminCreateUser : shared (Text) -> async ();
                 };
                 await node.adminCreateUser(Principal.toText(user));
-                await updateAllNodePermissions_(canister_id);
+                await updateGlobalPermissions_(canister_id);
                 return #ok(canister_id);
             };
         };
@@ -248,7 +248,7 @@ actor WorldHub {
                     adminCreateUser : shared (Text) -> async ();
                 };
                 await node.adminCreateUser(_uid);
-                await updateAllNodePermissions_(canister_id);
+                await updateGlobalPermissions_(canister_id);
                 return #ok(canister_id);
             };
         };
@@ -282,15 +282,15 @@ actor WorldHub {
 
     //world Canister Permission Rules
     //
-    public shared ({ caller }) func addEntityPermission(groupId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
+    public shared ({ caller }) func grantEntityPermission(groupId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
         let worldId = Principal.toText(caller);
         let k = worldId # "+" #groupId #"+" #entityId;
         _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
         for (i in _nodes.vals()) {
             let node = actor (i) : actor {
-                addEntityPermission : shared (Text, Text, Text, Text, Types.EntityPermission) -> async ();
+                grantEntityPermission : shared (Text, Text, Text, Text, Types.EntityPermission) -> async ();
             };
-            await node.addEntityPermission(worldId, groupId, entityId, principal, permission);
+            await node.grantEntityPermission(worldId, groupId, entityId, principal, permission);
         };
     };
 

@@ -112,7 +112,7 @@ actor class UserNode() {
   };
 
   private func isPermitted_(worldId : Text, groupId : Text, entityId : Text, principal : Text) : (Bool) {
-    if(worldId == principal) return true;
+    if (worldId == principal) return true;
     //check if globally permitted
     switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
       case (?p) {
@@ -125,7 +125,7 @@ actor class UserNode() {
       case _ {};
     };
 
-    let k = worldId # "+" #groupId #"+" #entityId;
+    let k = worldId # "+" #groupId # "+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         switch (Trie.find(p, Utils.keyT(principal), Text.equal)) {
@@ -238,7 +238,7 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionEntityConfig_(uid : Types.userId, wid : Types.worldId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Action, Text>) {
+  private func validateActionConfig_(uid : Types.userId, wid : Types.worldId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Action, Text>) {
     var action : ?Types.Action = getAction_(uid, wid, aid);
     var new_action : ?Types.Action = action;
     var _intervalStartTs : Nat = 0;
@@ -253,7 +253,7 @@ actor class UserNode() {
       };
       case _ {};
     };
-    switch(actionConfig.actionConstraint) {
+    switch (actionConfig.actionConstraint) {
       case (?constraints) {
         switch (constraints.timeConstraint) {
           case (?t) {
@@ -329,14 +329,17 @@ actor class UserNode() {
     return #ok(a);
   };
 
-  public shared ({ caller }) func processActionEntities(uid : Types.userId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Response, Text>) {
+  public shared ({ caller }) func processActionConfig(uid : Types.userId, aid : Types.actionId, actionConfig : Config.ActionConfig) : async (Result.Result<Types.Response, Text>) {
     let wid = Principal.toText(caller);
     let outcomes : [Config.ActionOutcomeOption] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#spendEntityQuantity sq) {
-          let entityWid = switch(sq.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (sq.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           if (isPermitted_(entityWid, sq.1, sq.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
@@ -355,19 +358,28 @@ actor class UserNode() {
           };
         };
         case (#receiveEntityQuantity rq) {
-          let entityWid = switch(rq.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (rq.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           if (isPermitted_(entityWid, rq.1, rq.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#renewEntityExpiration re) {
-          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (re.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           if (isPermitted_(entityWid, re.1, re.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#reduceEntityExpiration re) {
-          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (re.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           if (isPermitted_(entityWid, re.1, re.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
@@ -384,7 +396,10 @@ actor class UserNode() {
           };
         };
         case (#deleteEntity de) {
-          let entityWid = switch(de.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (de.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           if (isPermitted_(entityWid, de.1, de.2, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
@@ -395,15 +410,15 @@ actor class UserNode() {
     };
 
     var b = Buffer.Buffer<Types.Entity>(0);
-    var response : Types.Response = ({intervalStartTs = 0; actionCount = 0;}, [], [], []);
-    let isActionConfigValid = await validateActionEntityConfig_(uid, wid, aid, actionConfig);
+    var response : Types.Response = ({ intervalStartTs = 0; actionCount = 0 }, [], [], []);
+    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConfig);
     switch (isActionConfigValid) {
       case (#ok a) {
         _actions := Trie.put3D(_actions, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
         response := (a, [], [], []);
       };
-      case (#err _) {
-        return #err("actionConfig not valid");
+      case (#err a) {
+        return #err("Error: "#a);
       };
     };
 
@@ -411,7 +426,10 @@ actor class UserNode() {
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#receiveEntityQuantity rq) {
-          let entityWid = switch(rq.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (rq.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           var _entity = getEntity_(uid, entityWid, rq.1, rq.2);
           switch (_entity) {
             case (?entity) {
@@ -445,7 +463,10 @@ actor class UserNode() {
           };
         };
         case (#spendEntityQuantity dq) {
-          let entityWid = switch(dq.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (dq.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           var _entity = getEntity_(uid, entityWid, dq.1, dq.2);
           switch (_entity) {
             case (?entity) {
@@ -468,7 +489,10 @@ actor class UserNode() {
           };
         };
         case (#renewEntityExpiration re) {
-          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (re.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           var _entity = getEntity_(uid, entityWid, re.1, re.2);
           switch (_entity) {
             case (?entity) {
@@ -499,7 +523,10 @@ actor class UserNode() {
           };
         };
         case (#reduceEntityExpiration re) {
-          let entityWid = switch(re.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (re.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           var _entity = getEntity_(uid, entityWid, re.1, re.2);
           switch (_entity) {
             case (?entity) {
@@ -520,11 +547,17 @@ actor class UserNode() {
           };
         };
         case (#deleteEntity de) {
-          let entityWid = switch(de.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (de.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           _entities := entityRemove4D_(_entities, uid, entityWid, de.1, de.2);
         };
         case (#setEntityAttribute sa) {
-          let entityWid = switch(sa.0) { case(? value){value}; case(_){wid} };
+          let entityWid = switch (sa.0) {
+            case (?value) { value };
+            case (_) { wid };
+          };
           var _entity = getEntity_(uid, entityWid, sa.1, sa.2);
           switch (_entity) {
             case (?entity) {
@@ -580,8 +613,8 @@ actor class UserNode() {
       case (?g) {
         switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?g) {
-            for((gid, entityTrie) in Trie.iter(g)) {
-              for((eid, entity) in Trie.iter(entityTrie)) {
+            for ((gid, entityTrie) in Trie.iter(g)) {
+              for ((eid, entity) in Trie.iter(entityTrie)) {
                 trie := Trie.put(trie, Utils.keyT(eid), Text.equal, entity).0;
               };
             };
@@ -593,7 +626,7 @@ actor class UserNode() {
         return #err("user not found!");
       };
     };
-    for((i, v) in Trie.iter(trie)) {
+    for ((i, v) in Trie.iter(trie)) {
       b.add(v);
     };
     return #ok(Buffer.toArray(b));
@@ -633,15 +666,15 @@ actor class UserNode() {
 
   //World Canister Permission Rules
   //
-  public shared ({ caller }) func addEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
+  public shared ({ caller }) func grantEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
     assert (isWorldHub_(caller));
-    let k = worldId # "+" #groupId #"+" #entityId;
+    let k = worldId # "+" #groupId # "+" #entityId;
     _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
   };
 
   public shared ({ caller }) func removeEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text) : async () {
     assert (isWorldHub_(caller));
-    let k = worldId # "+" #groupId #"+" #entityId;
+    let k = worldId # "+" #groupId # "+" #entityId;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
         _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;
@@ -683,11 +716,11 @@ actor class UserNode() {
   };
 
   //to update permissions of newly created userNodes
-  public shared ({ caller }) func updateNodePermissions(key : Text, permissions : Trie.Trie<Text, Types.EntityPermission>) : async () {
+  public shared ({ caller }) func synchronizeEntityPermissions(key : Text, permissions : Trie.Trie<Text, Types.EntityPermission>) : async () {
     assert (isWorldHub_(caller));
     _permissions := Trie.put(_permissions, Utils.keyT(key), Text.equal, permissions).0;
   };
-  public shared ({ caller }) func updateAllNodeGlobalPermissions(permissions : Trie.Trie<Types.worldId, [Text]>) : async () {
+  public shared ({ caller }) func synchronizeGlobalPermissions(permissions : Trie.Trie<Types.worldId, [Text]>) : async () {
     assert (isWorldHub_(caller));
     _globalPermissions := permissions;
   };

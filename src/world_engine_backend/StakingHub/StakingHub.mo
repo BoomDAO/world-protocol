@@ -425,9 +425,9 @@ actor StakingHub {
     let _of : Text = Principal.toText(msg.caller);
     switch (Trie.find(icp_stakes, Utils.keyT(_of), Text.equal)) {
       case (?s) {
-        let minimum_amount_to_withdraw : Nat64 = 100000000; //change it accordingly
+        let minimum_amount_to_withdraw : Nat64 = 100000; //or 0.001 ICP. 100000000 or 1 ICP    //change it accordingly
         if (s.amount < minimum_amount_to_withdraw) {
-          return #err("minimum ICP dissolvable is 1, you stake " #Nat64.toText(s.amount));
+          return #err("minimum ICP dissolvable is 0.001, you stake " #Nat64.toText(s.amount));
         };
         icp_stakes := Trie.put(
           icp_stakes,

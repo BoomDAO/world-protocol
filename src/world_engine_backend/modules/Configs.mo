@@ -111,7 +111,7 @@ module{
     public type ActionArg = 
     {
         #default : {actionId: Text; };
-        #burnNft : {actionId: Text; index: Nat32; aid: Text};
+        #burnNft : {actionId: Text; index: Nat32; };
         #spendTokens : {actionId: Text; hash: Nat64; };
         #claimStakingReward : {actionId: Text; };
     };
@@ -120,7 +120,7 @@ module{
     {
         #burnNft : {nftCanister: Text;};
         #spendTokens : {tokenCanister: ? Text; amt: Float; baseZeroCount: Nat;  toPrincipal : Text; };
-        #claimStakingReward : { requiredAmount : Nat; tokenCanister: Text; };
+        #claimStakingReward : { requiredAmount : Float; baseZeroCount: Nat; tokenCanister: Text; };
     };
     public type ActionConstraint = 
     {
