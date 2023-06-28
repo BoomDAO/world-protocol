@@ -23,3 +23,7 @@ To dive deeper into the World Engine, read the tech docs here: https://docs.boom
   <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/40c77572-9ce7-4b01-9c26-9b167a82c5ee" alt="my banner"></a>
 </p>
 
+
+<p align="center">
+  <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/dee5d2ce-ec63-4d8a-be20-0b27d3bce407" alt="my banner"></a>
+</p>
