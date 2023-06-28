@@ -422,7 +422,7 @@ actor class UserNode() {
         response := (a, [], [], []);
       };
       case (#err a) {
-        return #err("Error: "#a);
+        return #err("Error: " #a);
       };
     };
 
@@ -579,10 +579,10 @@ actor class UserNode() {
             case _ {};
           };
         };
-        case (#mintNft val){
+        case (#mintNft val) {
           nftsToMintResult.add(val);
         };
-        case (#mintToken val){
+        case (#mintToken val) {
           tokensToMintResult.add(val);
         };
       };
@@ -637,6 +637,26 @@ actor class UserNode() {
     };
     for ((i, v) in Trie.iter(trie)) {
       b.add(v);
+    };
+    return #ok(Buffer.toArray(b));
+  };
+
+  public query func getAllUserWorldActions(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.Action], Text>) {
+    var b = Buffer.Buffer<ActionTypes.Action>(0);
+    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
+      case (?w) {
+        switch (Trie.find(w, Utils.keyT(wid), Text.equal)) {
+          case (?actions) {
+            for ((i, v) in Trie.iter(actions)) {
+              b.add(v);
+            };
+          };
+          case _ {};
+        };
+      };
+      case _ {
+        return #err("user not found!");
+      };
     };
     return #ok(Buffer.toArray(b));
   };
