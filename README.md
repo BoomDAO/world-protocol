@@ -17,3 +17,9 @@ The World Engine has 3 separate services:
 ## TECH DOCUMENTATION
 
 To dive deeper into the World Engine, read the tech docs here: https://docs.boomdao.xyz/world-engine
+
+
+<p align="center">
+  <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/40c77572-9ce7-4b01-9c26-9b167a82c5ee" alt="my banner"></a>
+</p>
+
