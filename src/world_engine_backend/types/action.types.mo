@@ -35,7 +35,7 @@ module{
         #burnNft : {actionId: Text; index: Nat32; };
         #verifyTransferIcp : {actionId: Text; blockIndex: Nat64; };
         #verifyTransferIcrc : {actionId: Text; blockIndex: Nat; };
-        #claimNftStakingRewardNft : {actionId: Text; };
+        #claimStakingRewardNft : {actionId: Text; };
         #claimStakingRewardIcp : {actionId: Text; };
         #claimStakingRewardIcrc : {actionId: Text; };
     };
@@ -108,10 +108,11 @@ module{
         #burnNft : { canister: Text;};
         #verifyTransferIcp : { amt: Float; toPrincipal : Text; };
         #verifyTransferIcrc : {canister: Text; amt: Float; baseZeroCount: Nat;  toPrincipal : Text; };
-        #claimNftStakingRewardNft : { canister: Text; requiredAmount : Nat; };
+        #claimStakingRewardNft : { canister: Text; requiredAmount : Nat; };
         #claimStakingRewardIcp : { requiredAmount : Float;  };
         #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; baseZeroCount: Nat; };
     };
+
     public type ActionConstraint = 
     {
         timeConstraint: ? {

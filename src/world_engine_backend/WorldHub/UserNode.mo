@@ -287,11 +287,11 @@ actor class UserNode() {
               let _attribute = Option.get(entity.attribute, "");
               //quantity check
               if (_greaterThan != 0.0 and _lessThan != 0.0) {
-                if (_quantity > _lessThan or _quantity < _greaterThan) return #err("");
+                if (_quantity > _lessThan or _quantity < _greaterThan) return #err("entity quantity is not in EntityContraints greaterThan and lessThan range");
               } else if (_lessThan == 0.0) {
-                if (_quantity < _greaterThan) return #err("");
+                if (_quantity < _greaterThan) return #err("entity quantity does not pass greaterThan EntityContraints");
               } else if (_greaterThan == 0.0) {
-                if (_quantity > _lessThan) return #err("");
+                if (_quantity > _lessThan) return #err("entity quantity does not pass lessThan EntityContraints");
               };
 
               //expiration check
@@ -299,7 +299,7 @@ actor class UserNode() {
                 case (?bool) {
                   if (bool) {
                     if (_expiration < Time.now()) {
-                      return #err("");
+                      return #err("entity expired as per EntityContraints expiration");
                     };
                   } else {};
                 };
@@ -310,7 +310,7 @@ actor class UserNode() {
               switch (e.equalToAttribute) {
                 case (?a) {
                   if (_attribute != a) {
-                    return #err("");
+                    return #err("entity does not pass EntityContraints equalToAttribute");
                   };
                 };
                 case _ {};
@@ -422,7 +422,7 @@ actor class UserNode() {
         response := (a, [], [], []);
       };
       case (#err a) {
-        return #err("Error: " #a);
+        return #err("Error: "#a);
       };
     };
 
@@ -579,10 +579,10 @@ actor class UserNode() {
             case _ {};
           };
         };
-        case (#mintNft val) {
+        case (#mintNft val){
           nftsToMintResult.add(val);
         };
-        case (#mintToken val) {
+        case (#mintToken val){
           tokensToMintResult.add(val);
         };
       };
@@ -637,26 +637,6 @@ actor class UserNode() {
     };
     for ((i, v) in Trie.iter(trie)) {
       b.add(v);
-    };
-    return #ok(Buffer.toArray(b));
-  };
-
-  public query func getAllUserWorldActions(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.Action], Text>) {
-    var b = Buffer.Buffer<ActionTypes.Action>(0);
-    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
-      case (?w) {
-        switch (Trie.find(w, Utils.keyT(wid), Text.equal)) {
-          case (?actions) {
-            for ((i, v) in Trie.iter(actions)) {
-              b.add(v);
-            };
-          };
-          case _ {};
-        };
-      };
-      case _ {
-        return #err("user not found!");
-      };
     };
     return #ok(Buffer.toArray(b));
   };
