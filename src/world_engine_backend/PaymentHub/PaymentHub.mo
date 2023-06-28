@@ -54,39 +54,39 @@ actor PaymentHub {
   private stable var icrc_holdings : Trie.Trie<Text, Trie.Trie<Text, Nat>> = Trie.empty(); //mapping game_canister_id -> icrc_token_canister_id -> ICRC-1 token they hold
 
   //Internals
-  private func updateHoldings_(_gcid : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text) : () {
+  private func updateHoldings_(gcid : Text, amt : Nat64, _type : Text, token_canister_id : ?Text) : () {
     switch (_type) {
       case ("ICP") {
-        switch (Trie.find(icp_holdings, Utils.keyT(_gcid), Text.equal)) {
+        switch (Trie.find(icp_holdings, Utils.keyT(gcid), Text.equal)) {
           case (?h) {
-            icp_holdings := Trie.put(icp_holdings, Utils.keyT(_gcid), Text.equal, (_amt + h)).0;
+            icp_holdings := Trie.put(icp_holdings, Utils.keyT(gcid), Text.equal, (amt + h)).0;
           };
           case _ {
-            icp_holdings := Trie.put(icp_holdings, Utils.keyT(_gcid), Text.equal, _amt).0;
+            icp_holdings := Trie.put(icp_holdings, Utils.keyT(gcid), Text.equal, amt).0;
           };
         };
       };
       case ("ICRC") {
         var _tcid : Text = Option.get(token_canister_id, "");
-        switch (Trie.find(icrc_holdings, Utils.keyT(_gcid), Text.equal)) {
+        switch (Trie.find(icrc_holdings, Utils.keyT(gcid), Text.equal)) {
           case (?_trie) {
             switch (Trie.find(_trie, Utils.keyT(_tcid), Text.equal)) {
               case (?h) {
                 var t : Trie.Trie<Text, Nat> = _trie;
-                t := Trie.put(t, Utils.keyT(_tcid), Text.equal, (Nat64.toNat(_amt) + h)).0;
-                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(_gcid), Text.equal, t).0;
+                t := Trie.put(t, Utils.keyT(_tcid), Text.equal, (Nat64.toNat(amt) + h)).0;
+                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(gcid), Text.equal, t).0;
               };
               case _ {
                 var t : Trie.Trie<Text, Nat> = Trie.empty();
-                t := Trie.put(t, Utils.keyT(_tcid), Text.equal, Nat64.toNat(_amt)).0;
-                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(_gcid), Text.equal, t).0;
+                t := Trie.put(t, Utils.keyT(_tcid), Text.equal, Nat64.toNat(amt)).0;
+                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(gcid), Text.equal, t).0;
               };
             };
           };
           case _ {
             var _t : Trie.Trie<Text, Nat> = Trie.empty();
-            _t := Trie.put(_t, Utils.keyT(_tcid), Text.equal, Nat64.toNat(_amt)).0;
-            icrc_holdings := Trie2D.put(icrc_holdings, Utils.keyT(_gcid), Text.equal, _t).0;
+            _t := Trie.put(_t, Utils.keyT(_tcid), Text.equal, Nat64.toNat(amt)).0;
+            icrc_holdings := Trie2D.put(icrc_holdings, Utils.keyT(gcid), Text.equal, _t).0;
           };
         };
       };
@@ -95,15 +95,15 @@ actor PaymentHub {
   };
 
   //IC Ledger Canister Query to verify tx height
-  private func queryIcpTx_(height : Nat64, _to : Text, _from : Text, _amt : ICP.Tokens) : async (Result.Result<Text, Text>) {
+  private func queryIcpTx_(height : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : ICP.Tokens) : async (Result.Result<Text, Text>) {
     var req : ICP.GetBlocksArgs = {
       start = height;
       length = 1;
     };
     let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
     var res : ICP.QueryBlocksResponse = await ICP_Ledger.query_blocks(req);
-    var to_ : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(_to, null);
-    var from_ : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(_from, null);
+    var toAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(toPrincipal, null);
+    var fromAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(fromPrincipal, null);
 
     var blocks : [ICP.Block] = res.blocks;
     var base_block : ICP.Block = blocks[0];
@@ -113,7 +113,7 @@ actor PaymentHub {
       case (?op) {
         switch (op) {
           case (#Transfer { to; fee; from; amount }) {
-            if (Hex.encode(Blob.toArray(Blob.fromArray(to))) == to_ and Hex.encode(Blob.toArray(Blob.fromArray(from))) == from_ and amount == _amt) {
+            if (Hex.encode(Blob.toArray(Blob.fromArray(to))) == toAccountId and Hex.encode(Blob.toArray(Blob.fromArray(from))) == fromAccountId and amount == amt) {
               return #ok("verified!");
             } else {
               return #err("invalid tx!");
@@ -135,7 +135,7 @@ actor PaymentHub {
 
   //ICRC1 Ledger Canister Query to verify ICRC-1 tx index
   //NOTE : Do Not Forget to change token_canister_id to query correct ICRC-1 Ledger
-  private func queryIcrcTx_(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (Result.Result<Text, Text>) {
+  private func queryIcrcTx_(index : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, token_canister_id : Text) : async (Result.Result<Text, Text>) {
     let l : Nat = 1;
     var _req : ICRC1.GetTransactionsRequest = {
       start = index;
@@ -143,11 +143,11 @@ actor PaymentHub {
     };
 
     var to_ : ICRC1.Account = {
-      owner = Principal.fromText(_to);
+      owner = Principal.fromText(toPrincipal);
       subaccount = null;
     };
     var from_ : ICRC1.Account = {
-      owner = Principal.fromText(_from);
+      owner = Principal.fromText(fromPrincipal);
       subaccount = null;
     };
     let ICRC1_Ledger : Ledger.ICRC1 = actor (ENV.ICRC1_Ledger); //add you ICRC-1 token_canister_id here, to query its tx
@@ -157,7 +157,7 @@ actor PaymentHub {
       let transfer = tx.transfer;
       switch (transfer) {
         case (?tt) {
-          if (tt.from == from_ and tt.to == to_ and tt.amount == _amt) {
+          if (tt.from == from_ and tt.to == to_ and tt.amount == amt) {
             return #ok("verified!");
           } else {
             return #err("tx transfer details mismatch!");
@@ -174,12 +174,12 @@ actor PaymentHub {
   };
 
   //prevent spam ICP txs and perform action on successfull unique tx
-  public shared (msg) func verifyTxIcp(height : Nat64, _to : Text, _from : Text, _amt : Nat64) : async (ICP.Response) {
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
+  public shared (msg) func verifyTxIcp(height : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymenthub_canister_id));
     var amt_ : ICP.Tokens = {
-      e8s = _amt;
+      e8s = amt;
     };
-    var res : Result.Result<Text, Text> = await queryIcpTx_(height, _to, _from, amt_);
+    var res : Result.Result<Text, Text> = await queryIcpTx_(height, toPrincipal, fromPrincipal, amt_);
     if (res == #ok("verified!")) {
       //tx spam check
       var tx : ?ICP.Tx = Trie.find(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal);
@@ -191,7 +191,7 @@ actor PaymentHub {
       };
       //update latest tx details in Payments canister memory
       if (Trie.size(icp_txs) < 2000) {
-        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
+        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
       } else {
         var oldestTx : Nat64 = height;
         for ((id, tx) in Trie.iter(icp_txs)) {
@@ -200,11 +200,11 @@ actor PaymentHub {
           };
         };
         icp_txs := Trie.remove(icp_txs, Utils.keyT(Nat64.toText(oldestTx)), Text.equal).0;
-        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
+        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
       };
 
       //update holdings of game_canister accordingly
-      updateHoldings_(Principal.toText(msg.caller), _amt, "ICP", null);
+      updateHoldings_(Principal.toText(msg.caller), amt, "ICP", null);
       return #Success("successfull");
     } else {
       return #Err "invalid tx!";
@@ -212,10 +212,9 @@ actor PaymentHub {
   };
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
-  public shared (msg) func verifyTxIcrc(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (ICP.Response) {
-    //assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.paymenthub_canister_id));
-    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, _to, _from, _amt, token_canister_id);
+  public shared (msg) func verifyTxIcrc(index : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, token_canister_id : Text) : async (ICP.Response) {
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymenthub_canister_id));
+    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, toPrincipal, fromPrincipal, amt, token_canister_id);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(token_canister_id), Text.equal)) {
@@ -232,7 +231,7 @@ actor PaymentHub {
       };
       //update latest tx details in Payments canister memory
       if (Trie.size(_token_txs) < 2000) {
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = _to; from = _from; amt = _amt }).0;
+        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(token_canister_id), Text.equal, _token_txs).0;
       } else {
         var oldestTx : Nat = index;
@@ -242,11 +241,11 @@ actor PaymentHub {
           };
         };
         _token_txs := Trie.remove(_token_txs, Utils.keyT(Nat.toText(oldestTx)), Text.equal).0;
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = _to; from = _from; amt = _amt }).0;
+        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(token_canister_id), Text.equal, _token_txs).0;
       };
 
-      updateHoldings_(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id);
+      updateHoldings_(Principal.toText(msg.caller), Nat64.fromNat(amt), "ICRC", ?token_canister_id);
       return #Success("successfull");
     } else {
       return #Err "ledger query failed!";
@@ -257,12 +256,12 @@ actor PaymentHub {
   // Invoke this endpoint from the Game Canister whoever wants to withdraw its holdings
   public shared ({ caller }) func withdrawIcp() : async (Result.Result<ICP.TransferResult, { #TxErr : ICP.TransferError; #Err : Text }>) {
     let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
-    let _to : Text = Principal.toText(caller);
-    switch (Trie.find(icp_holdings, Utils.keyT(_to), Text.equal)) {
+    let toPrincipal : Text = Principal.toText(caller);
+    switch (Trie.find(icp_holdings, Utils.keyT(toPrincipal), Text.equal)) {
       case (?h) {
         var amt : Nat64 = h - 10000; //deducting fees from holdings for ICP for Tx fees, you can change it accordingly
         var _req : ICP.TransferArgs = {
-          to = Hex.decode(AccountIdentifier.fromText(_to, null));
+          to = Hex.decode(AccountIdentifier.fromText(toPrincipal, null));
           fee = {
             e8s = 10000;
           };
@@ -276,7 +275,7 @@ actor PaymentHub {
         var res : ICP.TransferResult = await ICP_Ledger.transfer(_req);
         switch (res) {
           case (#Ok height) {
-            icp_holdings := Trie.remove(icp_holdings, Utils.keyT(_to), Text.equal).0;
+            icp_holdings := Trie.remove(icp_holdings, Utils.keyT(toPrincipal), Text.equal).0;
             return #ok(res);
           };
           case (#Err e) {
@@ -294,15 +293,15 @@ actor PaymentHub {
 
   public shared ({ caller }) func withdrawIcrc(token_canister_id : Text) : async (Result.Result<ICRC1.Result, { #TxErr : ICRC1.TransferError; #Err : Text }>) {
     let ICRC1_Ledger : Ledger.ICRC1 = actor (token_canister_id);
-    let _to : Text = Principal.toText(caller);
-    switch (Trie.find(icrc_holdings, Utils.keyT(_to), Text.equal)) {
+    let toPrincipal : Text = Principal.toText(caller);
+    switch (Trie.find(icrc_holdings, Utils.keyT(toPrincipal), Text.equal)) {
       case (?_trie) {
         switch (Trie.find(_trie, Utils.keyT(token_canister_id), Text.equal)) {
           case (?h) {
             var amt : Nat = h - 10; //deducting fees from user stakes for ckBTC Tx fees, you can change it accordingly for different ICRC-1 Tokens
             var _req : ICRC1.TransferArg = {
               to = {
-                owner = Principal.fromText(_to);
+                owner = Principal.fromText(toPrincipal);
                 subaccount = null;
               };
               fee = null;
@@ -316,7 +315,7 @@ actor PaymentHub {
               case (#Ok index) {
                 var t : Trie.Trie<Text, Nat> = _trie;
                 t := Trie.remove(t, Utils.keyT(token_canister_id), Text.equal).0;
-                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(_to), Text.equal, t).0;
+                icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(toPrincipal), Text.equal, t).0;
                 return #ok(res);
               };
               case (#Err e) {

@@ -12,47 +12,43 @@ import Utils "../utils/Utils";
 import Int "mo:base/Int";
 
 import ENV "../utils/Env";
-import TDatabase "../types/world.types";
 import Nat64 "mo:base/Nat64";
 import Debug "mo:base/Debug";
 
+import TEntity "./entity.types";
+import TGlobal "./global.types";
+
 module{
-    // ================ CONFIGS ========================= //
-    public type EntityConfig = 
-    {
-        eid: Text;
-        gid: Text;
-        name: ?Text;
-        description: ?Text;
-        imageUrl: ?Text;
-        objectUrl: ?Text;
-        rarity: ?Text;
-        duration: ?Nat;
-        tag: Text;
-        metadata: Text;
-    };
-
-    //ActionResult
-    public type entityId = Text;
-    public type groupId = Text;
-    public type worldId = ?Text;
-
+    
     public type attribute = Text;
     public type quantity = Float;
     public type duration = Nat;
+
+    public type Action = {
+        intervalStartTs : Nat;
+        actionCount : Nat;
+    };
+
+    public type ActionArg = 
+    {
+        #default : {actionId: Text; };
+        #burnNft : {actionId: Text; index: Nat32; };
+        #verifyTransferIcp : {actionId: Text; blockIndex: Nat64; };
+        #verifyTransferIcrc : {actionId: Text; blockIndex: Nat; };
+        #claimNftStakingRewardNft : {actionId: Text; };
+        #claimStakingRewardIcp : {actionId: Text; };
+        #claimStakingRewardIcrc : {actionId: Text; };
+    };
     
     public type MintToken = 
     {
-        name: Text;
-        description : Text; 
-        imageUrl: Text; 
+        quantity : Float;
+        baseZeroCount : Nat;
         canister : Text;
     };
     public type MintNft = 
     {
-        name: Text;
-        description : Text; 
-        imageUrl: Text; 
+        name : Text;
         canister : Text;
         assetId: Text;
         collection:  Text;
@@ -64,39 +60,39 @@ module{
             #mintToken : MintToken;
             #mintNft : MintNft;
             #setEntityAttribute : (
-                worldId,
-                groupId,
-                entityId,
+                ? TGlobal.worldId,
+                TGlobal.groupId,
+                TGlobal.entityId,
                 attribute
             );
             #spendEntityQuantity : (
-                worldId,
-                groupId,
-                entityId,
+                ? TGlobal.worldId,
+                TGlobal.groupId,
+                TGlobal.entityId,
                 quantity
             );
             #receiveEntityQuantity : (
-                worldId,
-                groupId,
-                entityId,
+                ? TGlobal.worldId,
+                TGlobal.groupId,
+                TGlobal.entityId,
                 quantity
             );
             #renewEntityExpiration : (
-                worldId,
-                groupId,
-                entityId,
+                ? TGlobal.worldId,
+                TGlobal.groupId,
+                TGlobal.entityId,
                 duration
             );
             #reduceEntityExpiration : (
-                worldId,
-                groupId,
-                entityId,
+                ? TGlobal.worldId,
+                TGlobal.groupId,
+                TGlobal.entityId,
                 duration
             );
             #deleteEntity : (
-                worldId,
-                groupId,
-                entityId
+                ? TGlobal.worldId,
+                TGlobal.groupId,
+                TGlobal.entityId
             );
         }
     };
@@ -107,20 +103,14 @@ module{
         outcomes: [ActionOutcome];
     };
 
-    //ActionConfig
-    public type ActionArg = 
-    {
-        #default : {actionId: Text; };
-        #burnNft : {actionId: Text; index: Nat32; };
-        #spendTokens : {actionId: Text; hash: Nat64; };
-        #claimStakingReward : {actionId: Text; };
-    };
-
     public type ActionPlugin = 
     {
-        #burnNft : {nftCanister: Text;};
-        #spendTokens : {tokenCanister: ? Text; amt: Float; baseZeroCount: Nat;  toPrincipal : Text; };
-        #claimStakingReward : { requiredAmount : Float; baseZeroCount: Nat; tokenCanister: Text; };
+        #burnNft : { canister: Text;};
+        #verifyTransferIcp : { amt: Float; toPrincipal : Text; };
+        #verifyTransferIcrc : {canister: Text; amt: Float; baseZeroCount: Nat;  toPrincipal : Text; };
+        #claimNftStakingRewardNft : { canister: Text; requiredAmount : Nat; };
+        #claimStakingRewardIcp : { requiredAmount : Float;  };
+        #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; baseZeroCount: Nat; };
     };
     public type ActionConstraint = 
     {
@@ -149,8 +139,5 @@ module{
         actionResult: ActionResult;
     };
 
-    //ConfigDataType
-
-    public type EntityConfigs = [EntityConfig]; 
-    public type ActionConfigs = [ActionConfig]; 
+    public type ActionResponse = (Action, [TEntity.Entity], [MintNft], [MintToken]);
 }

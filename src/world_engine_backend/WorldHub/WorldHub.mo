@@ -30,7 +30,6 @@ import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
 import UserNode "./UserNode";
-import Types "../types/world.types";
 import JSON "../utils/Json";
 import Parser "../utils/Parser";
 import ENV "../utils/Env";
@@ -39,17 +38,19 @@ import AccountIdentifier "../utils/AccountIdentifier";
 import Hex "../utils/Hex";
 import EXTCORE "../utils/Core";
 import EXT "../types/ext.types";
-import Configs "../modules/Configs";
 import Management "../modules/Management";
+
+import EntityTypes "../types/entity.types";
+import TGlobal "../types/global.types";
 
 actor WorldHub {
     //stable memory
-    private stable var _uids : Trie.Trie<Types.userId, Types.nodeId> = Trie.empty(); //mapping user_id -> node_canister_id
-    private stable var _usernames : Trie.Trie<Text, Types.userId> = Trie.empty(); //mapping username -> _uid
-    private stable var _nodes : [Types.nodeId] = []; //all user db canisters as nodes
+    private stable var _uids : Trie.Trie<TGlobal.userId, TGlobal.nodeId> = Trie.empty(); //mapping user_id -> node_canister_id
+    private stable var _usernames : Trie.Trie<Text, TGlobal.userId> = Trie.empty(); //mapping username -> _uid
+    private stable var _nodes : [TGlobal.nodeId] = []; //all user db canisters as nodes
     private stable var _admins : [Text] = ENV.admins; //admins for user db
-    private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, Types.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
-    private stable var _globalPermissions : Trie.Trie<Types.worldId, [Types.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
+    private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+    private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
@@ -112,13 +113,13 @@ actor WorldHub {
     private func updateGlobalPermissions_(canister_id : Text) : async () {
         for ((_key, _permission) in Trie.iter(_permissions)) {
             let node = actor (canister_id) : actor {
-                synchronizeEntityPermissions : shared (Text, Trie.Trie<Text, Types.EntityPermission>) -> async ();
-                synchronizeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
+                synchronizeEntityPermissions : shared (Text, Trie.Trie<Text, EntityTypes.EntityPermission>) -> async ();
+                synchronizeGlobalPermissions : shared (Trie.Trie<TGlobal.worldId, [Text]>) -> async ();
             };
             await node.synchronizeEntityPermissions(_key, _permission);
         };
         let node = actor (canister_id) : actor {
-            synchronizeGlobalPermissions : shared (Trie.Trie<Types.worldId, [Text]>) -> async ();
+            synchronizeGlobalPermissions : shared (Trie.Trie<TGlobal.worldId, [Text]>) -> async ();
         };
         await node.synchronizeGlobalPermissions(_globalPermissions);
     };
@@ -282,13 +283,13 @@ actor WorldHub {
 
     //world Canister Permission Rules
     //
-    public shared ({ caller }) func grantEntityPermission(groupId : Text, entityId : Text, principal : Text, permission : Types.EntityPermission) : async () {
+    public shared ({ caller }) func grantEntityPermission(groupId : Text, entityId : Text, principal : Text, permission : EntityTypes.EntityPermission) : async () {
         let worldId = Principal.toText(caller);
         let k = worldId # "+" #groupId #"+" #entityId;
         _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
         for (i in _nodes.vals()) {
             let node = actor (i) : actor {
-                grantEntityPermission : shared (Text, Text, Text, Text, Types.EntityPermission) -> async ();
+                grantEntityPermission : shared (Text, Text, Text, Text, EntityTypes.EntityPermission) -> async ();
             };
             await node.grantEntityPermission(worldId, groupId, entityId, principal, permission);
         };

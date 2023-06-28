@@ -51,17 +51,17 @@ actor StakingHub {
   private stable var ext_stakes : Trie.Trie<Text, TStaking.EXTStake> = Trie.empty(); //mapping "(ext_collection_canister_id + / + index)" -> Ext NFT stake user hold
 
   //to update Stakes of ICP/ICRC/EXT tokens
-  private func updateStakes_(_of : Text, _amt : Nat64, _type : Text, token_canister_id : ?Text, nft_index : ?Nat32) : () {
+  private func updateStakes_(ofPrincipal : Text, amt : Nat64, _type : Text, token_canister_id : ?Text, nft_index : ?Nat32) : () {
     switch (_type) {
       case ("ICP") {
-        switch (Trie.find(icp_stakes, Utils.keyT(_of), Text.equal)) {
+        switch (Trie.find(icp_stakes, Utils.keyT(ofPrincipal), Text.equal)) {
           case (?h) {
             icp_stakes := Trie.put(
               icp_stakes,
-              Utils.keyT(_of),
+              Utils.keyT(ofPrincipal),
               Text.equal,
               {
-                amount = (_amt + h.amount);
+                amount = (amt + h.amount);
                 dissolveAt = 0;
                 isDissolved = false;
               },
@@ -70,10 +70,10 @@ actor StakingHub {
           case _ {
             icp_stakes := Trie.put(
               icp_stakes,
-              Utils.keyT(_of),
+              Utils.keyT(ofPrincipal),
               Text.equal,
               {
-                amount = _amt;
+                amount = amt;
                 dissolveAt = 0;
                 isDissolved = false;
               },
@@ -83,7 +83,7 @@ actor StakingHub {
       };
       case ("ICRC") {
         var _tcid : Text = Option.get(token_canister_id, "");
-        switch (Trie.find(icrc_stakes, Utils.keyT(_of), Text.equal)) {
+        switch (Trie.find(icrc_stakes, Utils.keyT(ofPrincipal), Text.equal)) {
           case (?_trie) {
             switch (Trie.find(_trie, Utils.keyT(_tcid), Text.equal)) {
               case (?h) {
@@ -93,12 +93,12 @@ actor StakingHub {
                   Utils.keyT(_tcid),
                   Text.equal,
                   {
-                    amount = (Nat64.toNat(_amt) + h.amount);
+                    amount = (Nat64.toNat(amt) + h.amount);
                     dissolveAt = 0;
                     isDissolved = false;
                   },
                 ).0;
-                icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_of), Text.equal, t).0;
+                icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(ofPrincipal), Text.equal, t).0;
               };
               case _ {
                 var t : Trie.Trie<Text, TStaking.ICRCStake> = Trie.empty();
@@ -107,12 +107,12 @@ actor StakingHub {
                   Utils.keyT(_tcid),
                   Text.equal,
                   {
-                    amount = (Nat64.toNat(_amt));
+                    amount = (Nat64.toNat(amt));
                     dissolveAt = 0;
                     isDissolved = false;
                   },
                 ).0;
-                icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(_of), Text.equal, t).0;
+                icrc_stakes := Trie.put(icrc_stakes, Utils.keyT(ofPrincipal), Text.equal, t).0;
               };
             };
           };
@@ -123,12 +123,12 @@ actor StakingHub {
               Utils.keyT(_tcid),
               Text.equal,
               {
-                amount = (Nat64.toNat(_amt));
+                amount = (Nat64.toNat(amt));
                 dissolveAt = 0;
                 isDissolved = false;
               },
             ).0;
-            icrc_stakes := Trie2D.put(icrc_stakes, Utils.keyT(_of), Text.equal, _t).0;
+            icrc_stakes := Trie2D.put(icrc_stakes, Utils.keyT(ofPrincipal), Text.equal, _t).0;
           };
         };
       };
@@ -137,7 +137,7 @@ actor StakingHub {
         let default : Nat32 = 0;
         key := key # "/" #Nat32.toText(Option.get(nft_index, default)); //key = "token_canister_id" + "/" + "nft_index"
         var e : TStaking.EXTStake = {
-          staker = _of;
+          staker = ofPrincipal;
           tokenIndex = Option.get(nft_index, default);
           dissolveAt = 0;
           isDissolved = false;
@@ -149,15 +149,15 @@ actor StakingHub {
   };
 
   //IC Ledger Canister Query to verify tx height
-  private func queryIcpTx_(height : Nat64, _to : Text, _from : Text, _amt : ICP.Tokens) : async (Result.Result<Text, Text>) {
+  private func queryIcpTx_(height : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : ICP.Tokens) : async (Result.Result<Text, Text>) {
     var req : ICP.GetBlocksArgs = {
       start = height;
       length = 1;
     };
     let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
     var res : ICP.QueryBlocksResponse = await ICP_Ledger.query_blocks(req);
-    var to_ : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(_to, null);
-    var from_ : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(_from, null);
+    var toAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(toPrincipal, null);
+    var fromAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(fromPrincipal, null);
 
     var blocks : [ICP.Block] = res.blocks;
     var base_block : ICP.Block = blocks[0];
@@ -167,7 +167,7 @@ actor StakingHub {
       case (?op) {
         switch (op) {
           case (#Transfer { to; fee; from; amount }) {
-            if (Hex.encode(Blob.toArray(Blob.fromArray(to))) == to_ and Hex.encode(Blob.toArray(Blob.fromArray(from))) == from_ and amount == _amt) {
+            if (Hex.encode(Blob.toArray(Blob.fromArray(to))) == toAccountId and Hex.encode(Blob.toArray(Blob.fromArray(from))) == fromAccountId and amount == amt) {
               return #ok("verified!");
             } else {
               return #err("invalid tx!");
@@ -189,7 +189,7 @@ actor StakingHub {
 
   //ICRC1 Ledger Canister Query to verify ICRC-1 tx index
   //NOTE : Do Not Forget to change token_canister_id to query correct ICRC-1 Ledger
-  private func queryIcrcTx_(index : Nat, _to : Text, _from : Text, _amt : Nat) : async (Result.Result<Text, Text>) {
+  private func queryIcrcTx_(index : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat) : async (Result.Result<Text, Text>) {
     let l : Nat = 1;
     var _req : ICRC1.GetTransactionsRequest = {
       start = index;
@@ -197,11 +197,11 @@ actor StakingHub {
     };
 
     var to_ : ICRC1.Account = {
-      owner = Principal.fromText(_to);
+      owner = Principal.fromText(toPrincipal);
       subaccount = null;
     };
     var from_ : ICRC1.Account = {
-      owner = Principal.fromText(_from);
+      owner = Principal.fromText(fromPrincipal);
       subaccount = null;
     };
     let ICRC1_Ledger : Ledger.ICRC1 = actor (ENV.ICRC1_Ledger); //add you ICRC-1 token_canister_id here, to query its tx
@@ -211,10 +211,10 @@ actor StakingHub {
       let transfer = tx.transfer;
       switch (transfer) {
         case (?tt) {
-          if (tt.from == from_ and tt.to == to_ and tt.amount == _amt) {
+          if (tt.from == from_ and tt.to == to_ and tt.amount == amt) {
             return #ok("verified!");
           } else {
-            return #err("tx transfer details mismatch! " #Principal.toText(tt.from.owner) # " ||| " #Principal.toText(from_.owner) # " ||| " #Principal.toText(tt.to.owner) # " ||| " #Principal.toText(to_.owner) # " ||| " #Nat.toText(tt.amount) # " ||| " #Nat.toText(_amt));
+            return #err("tx transfer details mismatch! " #Principal.toText(tt.from.owner) # " ||| " #Principal.toText(from_.owner) # " ||| " #Principal.toText(tt.to.owner) # " ||| " #Principal.toText(to_.owner) # " ||| " #Nat.toText(tt.amount) # " ||| " #Nat.toText(amt));
           };
         };
         case (null) {
@@ -230,13 +230,13 @@ actor StakingHub {
   //EXT tx verification checks
   //1. Our StakingHubCanister owns the NFT
   //2. NFT is not already staked by someone else in our NFT vault
-  private func queryExtTx_(collection_canister_id : Text, nft_index : Nat32, _from : Text, _to : Text) : async (Result.Result<Text, Text>) {
+  private func queryExtTx_(collection_canister_id : Text, nft_index : Nat32, fromPrincipal : Text, toPrincipal : Text) : async (Result.Result<Text, Text>) {
     let EXT : Ledger.EXT = actor (collection_canister_id);
     var _registry : [(Nat32, Text)] = await EXT.getRegistry();
     for (i in _registry.vals()) {
       if (i.0 == nft_index) {
-        if (_to != AccountIdentifier.fromText(_to, null)) {
-          return #err("we do not hold this NFT yet!");
+        if (i.1 != AccountIdentifier.fromText(toPrincipal, null)) {
+          return #err("we do not hold this NFT of index "# Nat32.toText(nft_index) #" yet!");
         };
       };
     };
@@ -326,13 +326,13 @@ actor StakingHub {
   };
 
   //prevent spam ICP txs and perform action on successfull unique tx
-  public shared (msg) func updateIcpStakes(height : Nat64, _to : Text, _from : Text, _amt : Nat64) : async (ICP.Response) {
-    assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.stakinghub_canister_id)); //If payment is done to correct stakinghub_canister
+  public shared (msg) func updateIcpStakes(height : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
+    assert (Principal.fromText(fromPrincipal) == msg.caller); //If payment done by correct person and _from arg is passed correctly
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.stakinghub_canister_id)); //If payment is done to correct stakinghub_canister
     var amt_ : ICP.Tokens = {
-      e8s = _amt;
+      e8s = amt;
     };
-    var res : Result.Result<Text, Text> = await queryIcpTx_(height, _to, _from, amt_);
+    var res : Result.Result<Text, Text> = await queryIcpTx_(height, toPrincipal, fromPrincipal, amt_);
     if (res == #ok("verified!")) {
       //tx spam check
       var tx : ?ICP.Tx = Trie.find(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal);
@@ -344,7 +344,7 @@ actor StakingHub {
       };
       //update latest tx details in StakingHub canister memory
       if (Trie.size(icp_txs) < 2000) {
-        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
+        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
       } else {
         var oldestTx : Nat64 = height;
         for ((id, tx) in Trie.iter(icp_txs)) {
@@ -353,10 +353,10 @@ actor StakingHub {
           };
         };
         icp_txs := Trie.remove(icp_txs, Utils.keyT(Nat64.toText(oldestTx)), Text.equal).0;
-        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = _to; from = _from; amt = _amt }).0;
+        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
       };
       //update stakes of user who did the payment
-      updateStakes_(Principal.toText(msg.caller), _amt, "ICP", null, null);
+      updateStakes_(Principal.toText(msg.caller), amt, "ICP", null, null);
       return #Success("successfull");
     } else {
       return #Err "invalid tx!";
@@ -364,10 +364,10 @@ actor StakingHub {
   };
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
-  public shared (msg) func updateIcrcStakes(index : Nat, _to : Text, _from : Text, _amt : Nat, token_canister_id : Text) : async (ICP.Response) {
-    assert (Principal.fromText(_from) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.stakinghub_canister_id));
-    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, _to, _from, _amt);
+  public shared (msg) func updateIcrcStakes(index : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, token_canister_id : Text) : async (ICP.Response) {
+    assert (Principal.fromText(fromPrincipal) == msg.caller); //If payment done by correct person and _from arg is passed correctly
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.stakinghub_canister_id));
+    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, toPrincipal, fromPrincipal, amt);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(token_canister_id), Text.equal)) {
@@ -384,7 +384,7 @@ actor StakingHub {
       };
       //update latest tx details in Payments canister memory
       if (Trie.size(_token_txs) < 2000) {
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = _to; from = _from; amt = _amt }).0;
+        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(token_canister_id), Text.equal, _token_txs).0;
       } else {
         var oldestTx : Nat = index;
@@ -394,11 +394,11 @@ actor StakingHub {
           };
         };
         _token_txs := Trie.remove(_token_txs, Utils.keyT(Nat.toText(oldestTx)), Text.equal).0;
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = _to; from = _from; amt = _amt }).0;
+        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(token_canister_id), Text.equal, _token_txs).0;
       };
 
-      updateStakes_(Principal.toText(msg.caller), Nat64.fromNat(_amt), "ICRC", ?token_canister_id, null);
+      updateStakes_(Principal.toText(msg.caller), Nat64.fromNat(amt), "ICRC", ?token_canister_id, null);
       return #Success("successfull");
     } else {
       return #Err("ledger query failed! " # (switch (res) { case (#ok(result)) { result }; case (#err(result)) { result } }));
@@ -406,13 +406,13 @@ actor StakingHub {
   };
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
-  public shared (msg) func updateExtStakes(index : Nat32, _to : Text, _from : Text, collection_canister_id : Text) : async (ICP.Response) {
-    assert (Principal.fromText(_from) == msg.caller);
-    assert (Principal.fromText(_to) == Principal.fromText(ENV.stakinghub_canister_id));
+  public shared (msg) func updateExtStakes(index : Nat32, toPrincipal : Text, fromPrincipal : Text, collection_canister_id : Text) : async (ICP.Response) {
+    assert (Principal.fromText(fromPrincipal) == msg.caller);
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.stakinghub_canister_id));
 
-    switch (await queryExtTx_(collection_canister_id, index, _from, _to)) {
+    switch (await queryExtTx_(collection_canister_id, index, fromPrincipal, toPrincipal)) {
       case (#ok _) {
-        updateStakes_(_from, 1, "EXT", ?collection_canister_id, ?index);
+        updateStakes_(fromPrincipal, 1, "EXT", ?collection_canister_id, ?index);
         return #Success("successfull");
       };
       case (#err e) {
