@@ -12,14 +12,14 @@ import Nat64 "mo:base/Nat64";
 
 module {
     public type Tx = {
-        height : Nat64;
+        blockIndex : Nat64;
         to : Text;
         from : Text;
         amt : Nat64;
     };
 
     public type Tx_ICRC = {
-        index : Nat;
+        blockIndex : Nat;
         to : Text;
         from : Text;
         amt : Nat;
@@ -169,7 +169,5 @@ module {
     public type TransferFee = { transfer_fee : Tokens };
     public type TransferFeeArg = {};
     public type TransferResult = { #Ok : BlockIndex; #Err : TransferError };
-
-
     
 };

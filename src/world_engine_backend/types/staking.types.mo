@@ -50,7 +50,7 @@ module {
     canister_id : Text;
     token_type : Text;
     amount : Nat;
-    index : ?Text;
+    blockIndex : ?Text;
     dissolveAt : Int;
     isDissolved : Bool;
     };

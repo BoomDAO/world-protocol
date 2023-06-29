@@ -47,9 +47,9 @@ actor PaymentHub {
     amount : Nat;
   };
 
-  //Txs block heights
+  //Txs block indices
   private stable var icp_txs : Trie.Trie<Text, ICP.Tx> = Trie.empty(); //last 2000 txs of IC Ledger (verified in Payments canister) to prevent spam check in Payments canister
-  private stable var icrc_txs : Trie.Trie<Text, Trie.Trie<Text, ICP.Tx_ICRC>> = Trie.empty(); // (icrc_tokenCanisterId -> tx_height -> Tx) last 2000 txs of ICRC-1 Ledger (verified in Payments canister) to prevent spam check in Payments canister
+  private stable var icrc_txs : Trie.Trie<Text, Trie.Trie<Text, ICP.Tx_ICRC>> = Trie.empty(); // (icrc_tokenCanisterId -> tx_blockIndex -> Tx) last 2000 txs of ICRC-1 Ledger (verified in Payments canister) to prevent spam check in Payments canister
   private stable var icp_holdings : Trie.Trie<Text, Nat64> = Trie.empty(); //mapping game_canister_id -> ICP value they hodl
   private stable var icrc_holdings : Trie.Trie<Text, Trie.Trie<Text, Nat>> = Trie.empty(); //mapping game_canister_id -> icrc_tokenCanisterId -> ICRC-1 token they hold
 
@@ -94,10 +94,10 @@ actor PaymentHub {
     };
   };
 
-  //IC Ledger Canister Query to verify tx height
-  private func queryIcpTx_(height : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : ICP.Tokens) : async (Result.Result<Text, Text>) {
+  //IC Ledger Canister Query to verify tx blockIndex
+  private func queryIcpTx_(blockIndex : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : ICP.Tokens) : async (Result.Result<Text, Text>) {
     var req : ICP.GetBlocksArgs = {
-      start = height;
+      start = blockIndex;
       length = 1;
     };
     let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
@@ -133,12 +133,12 @@ actor PaymentHub {
     };
   };
 
-  //ICRC1 Ledger Canister Query to verify ICRC-1 tx index
+  //ICRC1 Ledger Canister Query to verify ICRC-1 tx blockIndex
   //NOTE : Do Not Forget to change tokenCanisterId to query correct ICRC-1 Ledger
-  private func queryIcrcTx_(index : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (Result.Result<Text, Text>) {
+  private func queryIcrcTx_(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (Result.Result<Text, Text>) {
     let l : Nat = 1;
     var _req : ICRC1.GetTransactionsRequest = {
-      start = index;
+      start = blockIndex;
       length = l;
     };
 
@@ -174,15 +174,15 @@ actor PaymentHub {
   };
 
   //prevent spam ICP txs and perform action on successfull unique tx
-  public shared (msg) func verifyTxIcp(height : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymenthub_canister_id));
+  public shared (msg) func verifyTxIcp(blockIndex : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymentHubCanisterId));
     var amt_ : ICP.Tokens = {
       e8s = amt;
     };
-    var res : Result.Result<Text, Text> = await queryIcpTx_(height, toPrincipal, fromPrincipal, amt_);
+    var res : Result.Result<Text, Text> = await queryIcpTx_(blockIndex, toPrincipal, fromPrincipal, amt_);
     if (res == #ok("verified!")) {
       //tx spam check
-      var tx : ?ICP.Tx = Trie.find(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal);
+      var tx : ?ICP.Tx = Trie.find(icp_txs, Utils.keyT(Nat64.toText(blockIndex)), Text.equal);
       switch (tx) {
         case (?t) {
           return #Err "old tx!";
@@ -191,16 +191,16 @@ actor PaymentHub {
       };
       //update latest tx details in Payments canister memory
       if (Trie.size(icp_txs) < 2000) {
-        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
+        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
       } else {
-        var oldestTx : Nat64 = height;
+        var oldestTx : Nat64 = blockIndex;
         for ((id, tx) in Trie.iter(icp_txs)) {
-          if (oldestTx > tx.height) {
-            oldestTx := tx.height;
+          if (oldestTx > tx.blockIndex) {
+            oldestTx := tx.blockIndex;
           };
         };
         icp_txs := Trie.remove(icp_txs, Utils.keyT(Nat64.toText(oldestTx)), Text.equal).0;
-        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(height)), Text.equal, { height = height; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
+        icp_txs := Trie.put(icp_txs, Utils.keyT(Nat64.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
       };
 
       //update holdings of game_canister accordingly
@@ -212,17 +212,17 @@ actor PaymentHub {
   };
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
-  public shared (msg) func verifyTxIcrc(index : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (ICP.Response) {
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymenthub_canister_id));
-    var res : Result.Result<Text, Text> = await queryIcrcTx_(index, toPrincipal, fromPrincipal, amt, tokenCanisterId);
+  public shared (msg) func verifyTxIcrc(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (ICP.Response) {
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymentHubCanisterId));
+    var res : Result.Result<Text, Text> = await queryIcrcTx_(blockIndex, toPrincipal, fromPrincipal, amt, tokenCanisterId);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal)) {
         case (?_txs) {
           _token_txs := _txs;
-          switch (Trie.find(_txs, Utils.keyT(Nat.toText(index)), Text.equal)) {
+          switch (Trie.find(_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal)) {
             case (?tx) {
-              return #Err("old tx index for ICRC-1 Token : " #tokenCanisterId);
+              return #Err("old tx blockIndex for ICRC-1 Token : " #tokenCanisterId);
             };
             case _ {};
           };
@@ -231,17 +231,17 @@ actor PaymentHub {
       };
       //update latest tx details in Payments canister memory
       if (Trie.size(_token_txs) < 2000) {
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
+        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal, _token_txs).0;
       } else {
-        var oldestTx : Nat = index;
+        var oldestTx : Nat = blockIndex;
         for ((id, tx) in Trie.iter(_token_txs)) {
-          if (oldestTx > tx.index) {
-            oldestTx := tx.index;
+          if (oldestTx > tx.blockIndex) {
+            oldestTx := tx.blockIndex;
           };
         };
         _token_txs := Trie.remove(_token_txs, Utils.keyT(Nat.toText(oldestTx)), Text.equal).0;
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(index)), Text.equal, { index = index; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
+        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
         icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal, _token_txs).0;
       };
 
@@ -274,7 +274,7 @@ actor PaymentHub {
         };
         var res : ICP.TransferResult = await ICP_Ledger.transfer(_req);
         switch (res) {
-          case (#Ok height) {
+          case (#Ok blockIndex) {
             icp_holdings := Trie.remove(icp_holdings, Utils.keyT(toPrincipal), Text.equal).0;
             return #ok(res);
           };
@@ -312,7 +312,7 @@ actor PaymentHub {
             };
             var res : ICRC1.Result = await ICRC1_Ledger.icrc1_transfer(_req);
             switch (res) {
-              case (#Ok index) {
+              case (#Ok blockIndex) {
                 var t : Trie.Trie<Text, Nat> = _trie;
                 t := Trie.remove(t, Utils.keyT(tokenCanisterId), Text.equal).0;
                 icrc_holdings := Trie.put(icrc_holdings, Utils.keyT(toPrincipal), Text.equal, t).0;
