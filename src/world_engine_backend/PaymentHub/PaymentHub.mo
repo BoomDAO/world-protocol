@@ -175,7 +175,7 @@ actor PaymentHub {
 
   //prevent spam ICP txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcp(blockIndex : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymentHubCanisterId));
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.payment_hub_canister_id));
     var amt_ : ICP.Tokens = {
       e8s = amt;
     };
@@ -213,7 +213,7 @@ actor PaymentHub {
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcrc(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (ICP.Response) {
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.paymentHubCanisterId));
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.payment_hub_canister_id));
     var res : Result.Result<Text, Text> = await queryIcrcTx_(blockIndex, toPrincipal, fromPrincipal, amt, tokenCanisterId);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();

@@ -38,8 +38,8 @@ module {
         "26otq-bnbgp-bfbhy-i7ypc-czyxx-3rlax-yrrny-issrb-kwepg-vqtcs-pae"
      ]; //add admin principal for access control over DB
 
-    public let worldHubCanisterId = "c4mme-3qaaa-aaaag-abiia-cai";
-    public let paymentHubCanisterId = "5hr3g-hqaaa-aaaap-abbxa-cai"; //!avoid changing this!
-    public let stakingHubCanisterId = "4p3dm-lyaaa-aaaal-qb4da-cai"; //!avoid changing this!
+    public let worldHub_canister_id = "c4mme-3qaaa-aaaag-abiia-cai";
+    public let payment_hub_canister_id = "5hr3g-hqaaa-aaaap-abbxa-cai"; //!avoid changing this!
+    public let staking_hub_canister_id = "4p3dm-lyaaa-aaaal-qb4da-cai"; //!avoid changing this!
     public let StakingHubAdmin = "";
 };

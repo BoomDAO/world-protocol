@@ -107,10 +107,10 @@ module{
     {
         #burnNft : { canister: Text;};
         #verifyTransferIcp : { amt: Float; toPrincipal : Text; };
-        #verifyTransferIcrc : {canister: Text; amt: Float; baseZeroCount: Nat;  toPrincipal : Text; };
+        #verifyTransferIcrc : {canister: Text; amt: Float; baseUnitCount: Nat;  toPrincipal : Text; };
         #claimStakingRewardNft : { canister: Text; requiredAmount : Nat; };
         #claimStakingRewardIcp : { requiredAmount : Float;  };
-        #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; baseZeroCount: Nat; };
+        #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; baseUnitCount: Nat; };
     };
 
     public type ActionConstraint = 
