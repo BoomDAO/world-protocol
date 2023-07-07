@@ -11,4 +11,6 @@ jobs:
         with:
           dfx-version: 0.13.1
           install-moc: true
-      - run: for i in src/world_engine_backend/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+      - run: for i in src/world_engine_backend/PaymentHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+      - run: for i in src/world_engine_backend/StakingHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+      - run: for i in src/world_engine_backend/WorldHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
