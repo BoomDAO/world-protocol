@@ -189,11 +189,10 @@ actor StakingHub {
 
   //ICRC1 Ledger Canister Query to verify ICRC-1 tx blockIndex
   //NOTE : Do Not Forget to change tokenCanisterId to query correct ICRC-1 Ledger
-  private func queryIcrcTx_(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat) : async (Result.Result<Text, Text>) {
-    let l : Nat = 1;
+  private func queryIcrcTx_(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (Result.Result<Text, Text>) {
     var _req : ICRC1.GetTransactionsRequest = {
       start = blockIndex;
-      length = l;
+      length = blockIndex + 1;
     };
 
     var to_ : ICRC1.Account = {
@@ -204,8 +203,22 @@ actor StakingHub {
       owner = Principal.fromText(fromPrincipal);
       subaccount = null;
     };
-    let ICRC1_Ledger : Ledger.ICRC1 = actor (ENV.ICRC1_Ledger); //add you ICRC-1 tokenCanisterId here, to query its tx
-    var t : ICRC1.GetTransactionsResponse = await ICRC1_Ledger.get_transactions(_req);
+    let ICRC1_Ledger : Ledger.ICRC1 = actor (tokenCanisterId);
+    var t : ICRC1.GetTransactionsResponse = {
+      first_index = 0;
+      log_length = 0;
+      transactions = [];
+      archived_transactions = [];
+    };
+    if (tokenCanisterId == ENV.ckBTCCanisterId) {
+      t := await ICRC1_Ledger.get_transactions(_req);
+    } else {
+      t := await ICRC1_Ledger.icrc3_get_transactions(_req);
+    };
+
+    if ((t.transactions).size() == 0) {
+      return #err("tx blockIndex does not exist");
+    };
     let tx = t.transactions[0];
     if (tx.kind == "transfer") {
       let transfer = tx.transfer;
@@ -214,7 +227,7 @@ actor StakingHub {
           if (tt.from == from_ and tt.to == to_ and tt.amount == amt) {
             return #ok("verified!");
           } else {
-            return #err("tx transfer details mismatch! " #Principal.toText(tt.from.owner) # " ||| " #Principal.toText(from_.owner) # " ||| " #Principal.toText(tt.to.owner) # " ||| " #Principal.toText(to_.owner) # " ||| " #Nat.toText(tt.amount) # " ||| " #Nat.toText(amt));
+            return #err("tx transfer details mismatch!");
           };
         };
         case (null) {
@@ -222,6 +235,20 @@ actor StakingHub {
         };
       };
 
+    } else if (tx.kind == "mint") {
+      let mint = tx.mint;
+      switch (mint) {
+        case (?tt) {
+          if (tt.to == to_ and tt.amount == amt) {
+            return #ok("verified!");
+          } else {
+            return #err("tx mint details mismatch!");
+          };
+        };
+        case (null) {
+          return #err("tx mint details not found!");
+        };
+      };
     } else {
       return #err("not a transfer!");
     };
@@ -367,7 +394,7 @@ actor StakingHub {
   public shared (msg) func updateIcrcStakes(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (ICP.Response) {
     assert (Principal.fromText(fromPrincipal) == msg.caller); //If payment done by correct person and _from arg is passed correctly
     assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.StakingHubCanisterId));
-    var res : Result.Result<Text, Text> = await queryIcrcTx_(blockIndex, toPrincipal, fromPrincipal, amt);
+    var res : Result.Result<Text, Text> = await queryIcrcTx_(blockIndex, toPrincipal, fromPrincipal, amt, tokenCanisterId);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
       switch (Trie.find(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal)) {
