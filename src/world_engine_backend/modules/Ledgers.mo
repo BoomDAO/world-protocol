@@ -18,6 +18,7 @@ module {
     //ICRC-1 Ledger Canister Interface
     public type ICRC1 = actor {
         get_transactions : shared query (ICRC1.GetTransactionsRequest) -> async (ICRC1.GetTransactionsResponse);
+        icrc3_get_transactions : shared query (ICRC1.GetTransactionsRequest) -> async (ICRC1.GetTransactionsResponse);
         icrc1_transfer : (ICRC1.TransferArg) -> async (ICRC1.Result);
     };
 

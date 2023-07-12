@@ -147,7 +147,7 @@ actor class UserNode() {
   // validating WorldHub Canister as caller
   private func isWorldHub_(p : Principal) : (Bool) {
     let _p : Text = Principal.toText(p);
-    if (_p == ENV.worldHub_canister_id) {
+    if (_p == ENV.WorldHubCanisterId) {
       return true;
     };
     return false;
@@ -326,11 +326,12 @@ actor class UserNode() {
     let a : ActionTypes.Action = {
       intervalStartTs = _intervalStartTs;
       actionCount = _actionCount;
+      actionId = aid;//NEW
     };
     return #ok(a);
   };
 
-  public shared ({ caller }) func processActionConfig(uid : TGlobal.userId, aid : TGlobal.actionId, actionConfig : ActionTypes.ActionConfig) : async (Result.Result<ActionTypes.ActionResponse, Text>) {
+  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConfig : ActionTypes.ActionConfig) : async (Result.Result<ActionTypes.ActionResponse, Text>) {
     let wid = Principal.toText(caller);
     let outcomes : [ActionTypes.ActionOutcomeOption] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
@@ -414,7 +415,11 @@ actor class UserNode() {
     var nftsToMintResult = Buffer.Buffer<ActionTypes.MintNft>(0);
     var tokensToMintResult = Buffer.Buffer<ActionTypes.MintToken>(0);
 
-    var response : ActionTypes.ActionResponse = ({ intervalStartTs = 0; actionCount = 0 }, [], [], []);
+    var response : ActionTypes.ActionResponse = ({ 
+      intervalStartTs = 0; 
+      actionCount = 0; 
+      actionId = aid //NEW
+      }, [], [], []);
     let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConfig);
     switch (isActionConfigValid) {
       case (#ok a) {
@@ -615,8 +620,33 @@ actor class UserNode() {
     Cycles.balance();
   };
 
+  public query func getAllUserWorldActions(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.Action], Text>) {
+    // var trie : Trie.Trie<TGlobal.entityId, ActionTypes.Action> = Trie.empty();
+    var b = Buffer.Buffer<ActionTypes.Action>(0);
+    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
+      case (?g) {
+        switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
+          case (?g) {
+            for ((aid, action) in Trie.iter(g)) {
+              //trie := Trie.put(trie, Utils.keyT(aid), Text.equal, action).0;
+              b.add(action);
+            };
+          };
+          case _ {};
+        };
+      };
+      case _ {
+        return #err("user not found!");
+      };
+    };
+    // for ((i, v) in Trie.iter(trie)) {
+    //   b.add(v);
+    // };
+    return #ok(Buffer.toArray(b));
+  };
+
   public query func getAllUserWorldEntities(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[EntityTypes.Entity], Text>) {
-    var trie : Trie.Trie<TGlobal.entityId, EntityTypes.Entity> = Trie.empty();
+    //var trie : Trie.Trie<TGlobal.entityId, EntityTypes.Entity> = Trie.empty();
     var b = Buffer.Buffer<EntityTypes.Entity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
@@ -624,7 +654,8 @@ actor class UserNode() {
           case (?g) {
             for ((gid, entityTrie) in Trie.iter(g)) {
               for ((eid, entity) in Trie.iter(entityTrie)) {
-                trie := Trie.put(trie, Utils.keyT(eid), Text.equal, entity).0;
+                //trie := Trie.put(trie, Utils.keyT(eid), Text.equal, entity).0;
+                b.add(entity);
               };
             };
           };
@@ -635,9 +666,9 @@ actor class UserNode() {
         return #err("user not found!");
       };
     };
-    for ((i, v) in Trie.iter(trie)) {
-      b.add(v);
-    };
+    // for ((i, v) in Trie.iter(trie)) {
+    //   b.add(v);
+    // };
     return #ok(Buffer.toArray(b));
   };
 

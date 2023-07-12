@@ -25,6 +25,7 @@ module{
     public type duration = Nat;
 
     public type Action = {
+        actionId : Text;
         intervalStartTs : Nat;
         actionCount : Nat;
     };
@@ -43,7 +44,7 @@ module{
     public type MintToken = 
     {
         quantity : Float;
-        baseZeroCount : Nat;
+        baseUnitCount : Nat;
         canister : Text;
     };
     public type MintNft = 
@@ -134,6 +135,7 @@ module{
         aid : Text;
         name : ?Text;
         description : ?Text;
+        imageUrl: ?Text;
         tag : ?Text;
         actionPlugin: ?ActionPlugin;
         actionConstraint: ?ActionConstraint;

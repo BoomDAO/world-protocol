@@ -311,7 +311,7 @@ actor StakingHub {
         let index = Nat32.fromNat(Utils.textToNat(path[1]));
 
         var _req : EXTCORE.TransferRequest = {
-          from = #principal(Principal.fromText(ENV.staking_hub_canister_id));
+          from = #principal(Principal.fromText(ENV.StakingHubCanisterId));
           to = #principal(Principal.fromText(_stakes.staker));
           token = EXTCORE.TokenIdentifier.fromText(collectionCanisterId, index);
           amount = 1;
@@ -328,7 +328,7 @@ actor StakingHub {
   //prevent spam ICP txs and perform action on successfull unique tx
   public shared (msg) func updateIcpStakes(blockIndex : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
     assert (Principal.fromText(fromPrincipal) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.staking_hub_canister_id)); //If payment is done to correct stakinghub_canister
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.StakingHubCanisterId)); //If payment is done to correct stakinghub_canister
     var amt_ : ICP.Tokens = {
       e8s = amt;
     };
@@ -366,7 +366,7 @@ actor StakingHub {
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
   public shared (msg) func updateIcrcStakes(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (ICP.Response) {
     assert (Principal.fromText(fromPrincipal) == msg.caller); //If payment done by correct person and _from arg is passed correctly
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.staking_hub_canister_id));
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.StakingHubCanisterId));
     var res : Result.Result<Text, Text> = await queryIcrcTx_(blockIndex, toPrincipal, fromPrincipal, amt);
     if (res == #ok("verified!")) {
       var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
@@ -408,7 +408,7 @@ actor StakingHub {
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
   public shared (msg) func updateExtStakes(index : Nat32, toPrincipal : Text, fromPrincipal : Text, collectionCanisterId : Text) : async (ICP.Response) {
     assert (Principal.fromText(fromPrincipal) == msg.caller);
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.staking_hub_canister_id));
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.StakingHubCanisterId));
 
     switch (await queryExtTx_(collectionCanisterId, index, fromPrincipal, toPrincipal)) {
       case (#ok _) {

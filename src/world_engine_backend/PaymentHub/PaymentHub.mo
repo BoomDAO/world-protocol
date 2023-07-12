@@ -136,10 +136,9 @@ actor PaymentHub {
   //ICRC1 Ledger Canister Query to verify ICRC-1 tx blockIndex
   //NOTE : Do Not Forget to change tokenCanisterId to query correct ICRC-1 Ledger
   private func queryIcrcTx_(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (Result.Result<Text, Text>) {
-    let l : Nat = 1;
     var _req : ICRC1.GetTransactionsRequest = {
       start = blockIndex;
-      length = l;
+      length = blockIndex + 1;
     };
 
     var to_ : ICRC1.Account = {
@@ -150,8 +149,22 @@ actor PaymentHub {
       owner = Principal.fromText(fromPrincipal);
       subaccount = null;
     };
-    let ICRC1_Ledger : Ledger.ICRC1 = actor (ENV.ICRC1_Ledger); //add you ICRC-1 tokenCanisterId here, to query its tx
-    var t : ICRC1.GetTransactionsResponse = await ICRC1_Ledger.get_transactions(_req);
+    let ICRC1_Ledger : Ledger.ICRC1 = actor (tokenCanisterId);
+    var t : ICRC1.GetTransactionsResponse = {
+      first_index = 0;
+      log_length = 0;
+      transactions = [];
+      archived_transactions = [];
+    };
+    if (tokenCanisterId == ENV.ckBTCCanisterId) {
+      t := await ICRC1_Ledger.get_transactions(_req);
+    } else {
+      t := await ICRC1_Ledger.icrc3_get_transactions(_req);
+    };
+
+    if ((t.transactions).size() == 0) {
+      return #err("tx blockIndex does not exist");
+    };
     let tx = t.transactions[0];
     if (tx.kind == "transfer") {
       let transfer = tx.transfer;
@@ -168,6 +181,20 @@ actor PaymentHub {
         };
       };
 
+    } else if (tx.kind == "mint") {
+      let mint = tx.mint;
+      switch (mint) {
+        case (?tt) {
+          if (tt.to == to_ and tt.amount == amt) {
+            return #ok("verified!");
+          } else {
+            return #err("tx mint details mismatch!");
+          };
+        };
+        case (null) {
+          return #err("tx mint details not found!");
+        };
+      };
     } else {
       return #err("not a transfer!");
     };
@@ -175,7 +202,7 @@ actor PaymentHub {
 
   //prevent spam ICP txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcp(blockIndex : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.payment_hub_canister_id));
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.PaymentHubCanisterId));
     var amt_ : ICP.Tokens = {
       e8s = amt;
     };
@@ -213,42 +240,45 @@ actor PaymentHub {
 
   //prevent spam ICRC-1 txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcrc(blockIndex : Nat, toPrincipal : Text, fromPrincipal : Text, amt : Nat, tokenCanisterId : Text) : async (ICP.Response) {
-    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.payment_hub_canister_id));
+    assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.PaymentHubCanisterId));
     var res : Result.Result<Text, Text> = await queryIcrcTx_(blockIndex, toPrincipal, fromPrincipal, amt, tokenCanisterId);
-    if (res == #ok("verified!")) {
-      var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
-      switch (Trie.find(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal)) {
-        case (?_txs) {
-          _token_txs := _txs;
-          switch (Trie.find(_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal)) {
-            case (?tx) {
-              return #Err("old tx blockIndex for ICRC-1 Token : " #tokenCanisterId);
+    switch (res) {
+      case (#ok _) {
+        var _token_txs : Trie.Trie<Text, ICP.Tx_ICRC> = Trie.empty();
+        switch (Trie.find(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal)) {
+          case (?_txs) {
+            _token_txs := _txs;
+            switch (Trie.find(_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal)) {
+              case (?tx) {
+                return #Err("old tx blockIndex for ICRC-1 Token : " #tokenCanisterId);
+              };
+              case _ {};
             };
-            case _ {};
           };
+          case _ {};
         };
-        case _ {};
-      };
-      //update latest tx details in Payments canister memory
-      if (Trie.size(_token_txs) < 2000) {
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
-        icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal, _token_txs).0;
-      } else {
-        var oldestTx : Nat = blockIndex;
-        for ((id, tx) in Trie.iter(_token_txs)) {
-          if (oldestTx > tx.blockIndex) {
-            oldestTx := tx.blockIndex;
+        //update latest tx details in Payments canister memory
+        if (Trie.size(_token_txs) < 2000) {
+          _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
+          icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal, _token_txs).0;
+        } else {
+          var oldestTx : Nat = blockIndex;
+          for ((id, tx) in Trie.iter(_token_txs)) {
+            if (oldestTx > tx.blockIndex) {
+              oldestTx := tx.blockIndex;
+            };
           };
+          _token_txs := Trie.remove(_token_txs, Utils.keyT(Nat.toText(oldestTx)), Text.equal).0;
+          _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
+          icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal, _token_txs).0;
         };
-        _token_txs := Trie.remove(_token_txs, Utils.keyT(Nat.toText(oldestTx)), Text.equal).0;
-        _token_txs := Trie.put(_token_txs, Utils.keyT(Nat.toText(blockIndex)), Text.equal, { blockIndex = blockIndex; to = toPrincipal; from = fromPrincipal; amt = amt }).0;
-        icrc_txs := Trie2D.put(icrc_txs, Utils.keyT(tokenCanisterId), Text.equal, _token_txs).0;
-      };
 
-      updateHoldings_(Principal.toText(msg.caller), Nat64.fromNat(amt), "ICRC", ?tokenCanisterId);
-      return #Success("successfull");
-    } else {
-      return #Err "ledger query failed!";
+        updateHoldings_(Principal.toText(msg.caller), Nat64.fromNat(amt), "ICRC", ?tokenCanisterId);
+        return #Success("successfull");
+      };
+      case (#err e) {
+        return #Err e;
+      };
     };
   };
 
