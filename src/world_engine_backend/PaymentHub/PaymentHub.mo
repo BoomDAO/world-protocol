@@ -200,6 +200,10 @@ actor PaymentHub {
     };
   };
 
+  public query func cycleBalance() : async Nat {
+    Cycles.balance();
+  };
+
   //prevent spam ICP txs and perform action on successfull unique tx
   public shared (msg) func verifyTxIcp(blockIndex : Nat64, toPrincipal : Text, fromPrincipal : Text, amt : Nat64) : async (ICP.Response) {
     assert (Principal.fromText(toPrincipal) == Principal.fromText(ENV.PaymentHubCanisterId));

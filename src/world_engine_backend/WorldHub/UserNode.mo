@@ -356,7 +356,9 @@ actor class UserNode() {
                 return #err(sq.1 # " entityId cannot undergo spendQuantity");
               };
             };
-            case _ {};
+            case _ {
+              return #err("You dont have entities of id: "#sq.2); 
+            };
           };
         };
         case (#receiveEntityQuantity rq) {

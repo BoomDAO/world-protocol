@@ -44,7 +44,6 @@ module{
     public type MintToken = 
     {
         quantity : Float;
-        baseUnitCount : Nat;
         canister : Text;
     };
     public type MintNft = 
@@ -108,10 +107,10 @@ module{
     {
         #burnNft : { canister: Text;};
         #verifyTransferIcp : { amt: Float; toPrincipal : Text; };
-        #verifyTransferIcrc : {canister: Text; amt: Float; baseUnitCount: Nat;  toPrincipal : Text; };
+        #verifyTransferIcrc : {canister: Text; amt: Float; toPrincipal : Text; };
         #claimStakingRewardNft : { canister: Text; requiredAmount : Nat; };
         #claimStakingRewardIcp : { requiredAmount : Float;  };
-        #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; baseUnitCount: Nat; };
+        #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; };
     };
 
     public type ActionConstraint = 

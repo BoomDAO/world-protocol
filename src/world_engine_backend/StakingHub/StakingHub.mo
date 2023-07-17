@@ -263,7 +263,7 @@ actor StakingHub {
     for (i in _registry.vals()) {
       if (i.0 == nftIndex) {
         if (i.1 != AccountIdentifier.fromText(toPrincipal, null)) {
-          return #err("we do not hold this NFT of index "# Nat32.toText(nftIndex) #" yet!");
+          return #err("we do not hold this NFT of index " # Nat32.toText(nftIndex) # " yet!");
         };
       };
     };
@@ -350,6 +350,10 @@ actor StakingHub {
         var res : EXTCORE.TransferResponse = await EXT.transfer(_req);
       };
     };
+  };
+
+  public query func cycleBalance() : async Nat {
+    Cycles.balance();
   };
 
   //prevent spam ICP txs and perform action on successfull unique tx

@@ -285,7 +285,7 @@ actor WorldHub {
     //
     public shared ({ caller }) func grantEntityPermission(groupId : Text, entityId : Text, principal : Text, permission : EntityTypes.EntityPermission) : async () {
         let worldId = Principal.toText(caller);
-        let k = worldId # "+" #groupId #"+" #entityId;
+        let k = worldId # "+" #groupId # "+" #entityId;
         _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
         for (i in _nodes.vals()) {
             let node = actor (i) : actor {
@@ -297,7 +297,7 @@ actor WorldHub {
 
     public shared ({ caller }) func removeEntityPermission(groupId : Text, entityId : Text, principal : Text) : async () {
         let worldId = Principal.toText(caller);
-        let k = worldId # "+" #groupId #"+" #entityId;
+        let k = worldId # "+" #groupId # "+" #entityId;
         switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
             case (?p) {
                 _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;
@@ -354,7 +354,7 @@ actor WorldHub {
         };
     };
 
-    public shared ({caller}) func whoami() : async (Text) {
+    public shared ({ caller }) func whoami() : async (Text) {
         return Principal.toText(caller);
     };
 
