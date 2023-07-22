@@ -153,35 +153,6 @@ actor class UserNode() {
     return false;
   };
 
-  private func generateActionResultOutcomes_(actionResult : ActionTypes.ActionResult) : async ([ActionTypes.ActionOutcomeOption]) {
-    var outcomes = Buffer.Buffer<ActionTypes.ActionOutcomeOption>(0);
-    for (outcome in actionResult.outcomes.vals()) {
-      var accumulated_weight : Float = 0;
-
-      //A) Compute total weight on the current outcome
-      for (outcomeOption in outcome.possibleOutcomes.vals()) {
-        accumulated_weight += outcomeOption.weight;
-      };
-
-      //B) Gen a random number using the total weight as max value
-      let rand_perc = await RandomUtil.get_random_perc();
-      var dice_outcome = (rand_perc * 1.0 * accumulated_weight);
-
-      //C Pick outcomes base on their weights
-      label outcome_loop for (outcomeOption in outcome.possibleOutcomes.vals()) {
-        let outcome_weight = outcomeOption.weight;
-        if (outcome_weight >= dice_outcome) {
-          outcomes.add(outcomeOption);
-          break outcome_loop;
-        } else {
-          dice_outcome -= outcome_weight;
-        };
-      };
-    };
-
-    return Buffer.toArray(outcomes);
-  };
-
   private func getEntity_(uid : TGlobal.userId, wid : TGlobal.worldId, gid : TGlobal.groupId, eid : TGlobal.entityId) : (?EntityTypes.Entity) {
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?w) {
@@ -239,7 +210,7 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConfig : ActionTypes.ActionConfig) : async (Result.Result<ActionTypes.Action, Text>) {
+  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint :?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.Action, Text>) {
     var action : ?ActionTypes.Action = getAction_(uid, wid, aid);
     var new_action : ?ActionTypes.Action = action;
     var _intervalStartTs : Nat = 0;
@@ -254,7 +225,7 @@ actor class UserNode() {
       };
       case _ {};
     };
-    switch (actionConfig.actionConstraint) {
+    switch (actionConstraint) {
       case (?constraints) {
         switch (constraints.timeConstraint) {
           case (?t) {
@@ -316,7 +287,27 @@ actor class UserNode() {
                 case _ {};
               };
             };
-            case _ {};
+            case _ {//If u dont have the entity
+
+              if(_greaterThan > 0 ) return #err("You don't have entity of id: "#e.entityId#" that meets quantity requirement of: "# Float.toText(_greaterThan));
+              
+              //expiration check
+              switch (e.notExpired) {
+                case (?bool) {
+                  return #err("You don't have entity of id: "#e.entityId#", therefore you dont meet requirement ");
+                };
+                case _ {};
+              };
+
+              //attribute check
+              switch (e.equalToAttribute) {
+                case (?a) {
+                  return #err("You don't have entity of id: "#e.entityId#", therefore you dont meet requirement ");
+                };
+                case _ {};
+              };
+
+            };
           };
         };
       };
@@ -331,9 +322,8 @@ actor class UserNode() {
     return #ok(a);
   };
 
-  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConfig : ActionTypes.ActionConfig) : async (Result.Result<ActionTypes.ActionResponse, Text>) {
+  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<(), Text>) {
     let wid = Principal.toText(caller);
-    let outcomes : [ActionTypes.ActionOutcomeOption] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
@@ -414,15 +404,13 @@ actor class UserNode() {
     };
 
     var b = Buffer.Buffer<EntityTypes.Entity>(0);
-    var nftsToMintResult = Buffer.Buffer<ActionTypes.MintNft>(0);
-    var tokensToMintResult = Buffer.Buffer<ActionTypes.MintToken>(0);
 
     var response : ActionTypes.ActionResponse = ({ 
       intervalStartTs = 0; 
       actionCount = 0; 
       actionId = aid //NEW
       }, [], [], []);
-    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConfig);
+    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConstraint);
     switch (isActionConfigValid) {
       case (#ok a) {
         _actions := Trie.put3D(_actions, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
@@ -586,16 +574,11 @@ actor class UserNode() {
             case _ {};
           };
         };
-        case (#mintNft val){
-          nftsToMintResult.add(val);
-        };
-        case (#mintToken val){
-          tokensToMintResult.add(val);
+        case _ {
         };
       };
     };
-    response := (response.0, Buffer.toArray(b), Buffer.toArray(nftsToMintResult), Buffer.toArray(tokensToMintResult));
-    return #ok(response);
+    return #ok(());
   };
 
   public shared ({ caller }) func manuallyOverwriteEntities(uid : TGlobal.userId, gid : TGlobal.groupId, entities : [EntityTypes.Entity]) : async (Result.Result<[EntityTypes.Entity], Text>) {
@@ -765,5 +748,50 @@ actor class UserNode() {
   public shared ({ caller }) func synchronizeGlobalPermissions(permissions : Trie.Trie<TGlobal.worldId, [Text]>) : async () {
     assert (isWorldHub_(caller));
     _globalPermissions := permissions;
+  };
+
+  //To Import User <-> World <-> Configs related endpoints
+  public shared ({ caller }) func importAllUsersDataOfWorld(ofWorldId : Text, toWorldId : Text) : async (Result.Result<Text, Text>) {
+    assert (isWorldHub_(caller));
+    for((userId, user_data) in Trie.iter(_entities)) {
+      switch (Trie.find(user_data, Utils.keyT(ofWorldId), Text.equal)) {
+        case (?user_world_data) {
+          var new_user_data = user_data;
+          new_user_data := Trie.put(new_user_data, Utils.keyT(toWorldId), Text.equal, user_world_data).0;
+          _entities := Trie.put(_entities, Utils.keyT(userId), Text.equal, new_user_data).0;
+        };
+        case _ {};
+      };
+    };
+
+    for((userId, user_data) in Trie.iter(_actions)) {
+      switch (Trie.find(user_data, Utils.keyT(ofWorldId), Text.equal)) {
+        case (?user_world_data) {
+          var new_user_data = user_data;
+          new_user_data := Trie.put(new_user_data, Utils.keyT(toWorldId), Text.equal, user_world_data).0;
+          _actions := Trie.put(_actions, Utils.keyT(userId), Text.equal, new_user_data).0;
+        };
+        case _ {};
+      };
+    };
+    return #ok("imported");
+  };
+
+  public shared ({ caller }) func importAllPermissionsOfWorld(ofWorldId : Text, toWorldId : Text) : async (Result.Result<Text, Text>) {
+    assert (isWorldHub_(caller));
+    for ((id, trie) in Trie.iter(_permissions)) {
+      let ids = Iter.toArray(Text.tokens(id, #text("+"))); //"worldCanisterId + "+" + GroupId + "+" + EntityId"
+      if (ids[0] == ofWorldId) {
+        let new_id = toWorldId # "+" #ids[1] # "+" #ids[2];
+        _permissions := Trie.put(_permissions, Utils.keyT(new_id), Text.equal, trie).0;
+      };
+    };
+    switch (Trie.find(_globalPermissions, Utils.keyT(ofWorldId), Text.equal)) {
+      case (?p) {
+        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(toWorldId), Text.equal, p).0;
+      };
+      case _ {};
+    };
+    return #ok("imported");
   };
 };

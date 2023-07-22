@@ -48,10 +48,9 @@ module{
     };
     public type MintNft = 
     {
-        name : Text;
+        index : ? Nat32;
         canister : Text;
         assetId: Text;
-        collection:  Text;
         metadata: Text;
     };
     public type ActionOutcomeOption = {

@@ -38,6 +38,8 @@ import ICRC1 "../types/icrc.types";
 import ENV "../utils/Env";
 import Ledger "../modules/Ledgers";
 import Utils "../utils/Utils";
+import Management "../modules/Management";
+import UserNode "../WorldHub/UserNode";
 
 actor PaymentHub {
 

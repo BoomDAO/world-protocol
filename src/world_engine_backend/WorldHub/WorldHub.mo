@@ -358,4 +358,49 @@ actor WorldHub {
         return Principal.toText(caller);
     };
 
+    public shared({caller}) func importAllUsersDataOfWorld(ofWorldId : Text, toWorldId :  Text) : async (Result.Result<Text, Text>) {
+        var countOfNodesUpdated : Nat = 0;
+        for (i in _nodes.vals()) {
+            let node = actor (i) : actor {
+                importAllUsersDataOfWorld : shared (Text, Text) -> async (Result.Result<Text, Text>);
+            };
+            var res = await node.importAllUsersDataOfWorld(ofWorldId, toWorldId);
+            switch (res) {case (#ok _) countOfNodesUpdated := countOfNodesUpdated + 1; case _ {};};
+        };
+        if(countOfNodesUpdated == _nodes.size()){
+            return #ok("imported");
+        } else {
+            return #err("some error occured in userNodes, contact dev team in discord");
+        }
+    };
+
+    public shared({caller}) func importAllPermissionsOfWorld(ofWorldId : Text, toWorldId :  Text) : async (Result.Result<Text, Text>) {
+        for((id, trie) in Trie.iter(_permissions)) {
+            let ids = Iter.toArray(Text.tokens(id, #text("+"))); //"worldCanisterId + "+" + GroupId + "+" + EntityId"
+            if(ids[0] == ofWorldId) {
+                let new_id = toWorldId # "+" #ids[1] # "+" #ids[2];
+                _permissions := Trie.put(_permissions, Utils.keyT(new_id), Text.equal, trie).0;
+            };
+        };
+        switch (Trie.find(_globalPermissions, Utils.keyT(ofWorldId), Text.equal)) {
+            case(?p) {
+                _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(toWorldId), Text.equal, p).0;
+            };
+            case _ {};
+        };
+        var countOfNodesUpdated : Nat = 0;
+        for (i in _nodes.vals()) {
+            let node = actor (i) : actor {
+                importAllPermissionsOfWorld : shared (Text, Text) -> async (Result.Result<Text, Text>);
+            };
+            var res = await node.importAllPermissionsOfWorld(ofWorldId, toWorldId);
+            switch (res) {case (#ok _) countOfNodesUpdated := countOfNodesUpdated + 1; case _ {};};
+        };
+        if(countOfNodesUpdated == _nodes.size()){
+            return #ok("imported");
+        } else {
+            return #err("some error occured in userNodes, contact dev team in discord");
+        }
+    };
+
 };
