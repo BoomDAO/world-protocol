@@ -5,13 +5,7 @@
   "StakingHub": {
     "ic": "jozll-yaaaa-aaaap-abf5q-cai"
   },
-  "UserNode": {
-    "dev": "yz5ny-jqaaa-aaaag-absga-cai",
-    "ic": "6tuow-oqaaa-aaaap-abgcq-cai"
-  },
   "WorldHub": {
-    "dev": "c4mme-3qaaa-aaaag-abiia-cai",
-    "ic": "j362g-ziaaa-aaaap-abf6a-cai",
-    "staging": "fgpem-ziaaa-aaaag-abi2q-cai"
+    "ic": "j362g-ziaaa-aaaap-abf6a-cai"
   }
 }
