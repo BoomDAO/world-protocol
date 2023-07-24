@@ -1,16 +1,28 @@
+name: Build and Deploy all BOOM DAO World Engine Canisters
 on:
   push:
     branches:
       - main
 jobs:
-  backend:
+  Deploy_All_Canisters:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: aviate-labs/setup-dfx@v0.2.5
         with:
-          dfx-version: 0.13.1
+          dfx-version: 0.14.3
           install-moc: true
-      - run: for i in src/world_engine_backend/PaymentHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
-      - run: for i in src/world_engine_backend/StakingHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
-      - run: for i in src/world_engine_backend/WorldHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+        env: 
+          DFX_IDENTITY_PEM: ${{ secrets.DFX_IDENTITY_PEM }}
+      - name: Deploy All Canisters
+        run: |
+          dfx identity use action
+          for i in src/world_engine_backend/PaymentHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+          for i in src/world_engine_backend/StakingHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+          for i in src/world_engine_backend/WorldHub/*.mo ; do moc --package base $(dfx cache show)/base --check $i ; done
+          dfx deploy --network ic --no-wallet PaymentHub
+          dfx deploy --network ic --no-wallet StakingHub
+          dfx deploy --network ic --no-wallet WorldHub
+          dfx canister --network ic info 5hr3g-hqaaa-aaaap-abbxa-cai
+          dfx canister --network ic info jozll-yaaaa-aaaap-abf5q-cai
+          dfx canister --network ic info j362g-ziaaa-aaaap-abf6a-cai
