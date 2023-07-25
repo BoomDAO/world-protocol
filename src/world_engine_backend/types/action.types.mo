@@ -18,8 +18,8 @@ import Debug "mo:base/Debug";
 import TEntity "./entity.types";
 import TGlobal "./global.types";
 
-module{
-    
+module {
+
     public type attribute = Text;
     public type quantity = Float;
     public type duration = Nat;
@@ -30,115 +30,119 @@ module{
         actionCount : Nat;
     };
 
-    public type ActionArg = 
-    {
-        #default : {actionId: Text; };
-        #burnNft : {actionId: Text; index: Nat32; };
-        #verifyTransferIcp : {actionId: Text; blockIndex: Nat64; };
-        #verifyTransferIcrc : {actionId: Text; blockIndex: Nat; };
-        #claimStakingRewardNft : {actionId: Text; };
-        #claimStakingRewardIcp : {actionId: Text; };
-        #claimStakingRewardIcrc : {actionId: Text; };
+    public type ActionArg = {
+        #default : { actionId : Text };
+        #burnNft : { actionId : Text; index : Nat32 };
+        #verifyTransferIcp : { actionId : Text; blockIndex : Nat64 };
+        #verifyTransferIcrc : { actionId : Text; blockIndex : Nat };
+        #claimStakingRewardNft : { actionId : Text };
+        #claimStakingRewardIcp : { actionId : Text };
+        #claimStakingRewardIcrc : { actionId : Text };
     };
-    
-    public type MintToken = 
-    {
+
+    public type MintToken = {
         quantity : Float;
         canister : Text;
     };
-    public type MintNft = 
-    {
-        index : ? Nat32;
+    public type MintNft = {
+        index : ?Nat32;
         canister : Text;
-        assetId: Text;
-        metadata: Text;
+        assetId : Text;
+        metadata : Text;
+    };
+    public type SetEntityAttribute = {
+        wid : ?TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+        attribute : attribute;
+    };
+    public type SpendEntityQuantity = {
+        wid : ?TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+        quantity : quantity;
+    };
+    public type ReceiveEntityQuantity = {
+        wid : ?TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+        quantity : quantity;
+    };
+    public type RenewEntityExpiration = {
+        wid : ?TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+        duration : duration;
+    };
+    public type ReduceEntityExpiration = {
+        wid : ?TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+        duration : duration;
+    };
+    public type DeleteEntity = {
+        wid : ?TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
     };
     public type ActionOutcomeOption = {
-        weight: Float;
+        weight : Float;
         option : {
             #mintToken : MintToken;
             #mintNft : MintNft;
-            #setEntityAttribute : (
-                wid : ? TGlobal.worldId,
-                gid: TGlobal.groupId,
-                eid: TGlobal.entityId,
-                attribute: attribute
-            );
-            #spendEntityQuantity : (
-                wid : ? TGlobal.worldId,
-                gid: TGlobal.groupId,
-                eid: TGlobal.entityId,
-                quantity : quantity
-            );
-            #receiveEntityQuantity : (
-                wid : ? TGlobal.worldId,
-                gid: TGlobal.groupId,
-                eid: TGlobal.entityId,
-                quantity : quantity
-            );
-            #renewEntityExpiration : (
-                wid : ? TGlobal.worldId,
-                gid: TGlobal.groupId,
-                eid: TGlobal.entityId,
-                duration : duration
-            );
-            #reduceEntityExpiration : (
-                wid : ? TGlobal.worldId,
-                gid: TGlobal.groupId,
-                eid: TGlobal.entityId,
-                duration : duration
-            );
-            #deleteEntity : (
-                wid : ? TGlobal.worldId,
-                gid: TGlobal.groupId,
-                eid: TGlobal.entityId
-            );
-        }
+            #setEntityAttribute : SetEntityAttribute;
+            #spendEntityQuantity : SpendEntityQuantity;
+            #receiveEntityQuantity : ReceiveEntityQuantity;
+            #renewEntityExpiration : RenewEntityExpiration;
+            #reduceEntityExpiration : ReduceEntityExpiration;
+            #deleteEntity : DeleteEntity;
+        };
     };
     public type ActionOutcome = {
-        possibleOutcomes: [ActionOutcomeOption];
+        possibleOutcomes : [ActionOutcomeOption];
     };
     public type ActionResult = {
-        outcomes: [ActionOutcome];
+        outcomes : [ActionOutcome];
     };
 
-    public type ActionPlugin = 
-    {
-        #burnNft : { canister: Text;};
-        #verifyTransferIcp : { amt: Float; toPrincipal : Text; };
-        #verifyTransferIcrc : {canister: Text; amt: Float; toPrincipal : Text; };
-        #claimStakingRewardNft : { canister: Text; requiredAmount : Nat; };
-        #claimStakingRewardIcp : { requiredAmount : Float;  };
-        #claimStakingRewardIcrc : { canister: Text; requiredAmount : Float; };
-    };
-
-    public type ActionConstraint = 
-    {
-        timeConstraint: ? {
-            intervalDuration: Nat; 
-            actionsPerInterval: Nat; 
+    public type ActionPlugin = {
+        #burnNft : { canister : Text };
+        #verifyTransferIcp : { amt : Float; toPrincipal : Text };
+        #verifyTransferIcrc : {
+            canister : Text;
+            amt : Float;
+            toPrincipal : Text;
         };
-        entityConstraint : ? [{ 
-            worldId: Text; 
-            groupId: Text; 
-            entityId: Text; 
-            equalToAttribute: ?Text; 
-            greaterThanOrEqualQuantity: ?Float; 
-            lessThanQuantity: ?Float; 
-            notExpired: ?Bool
+        #claimStakingRewardNft : { canister : Text; requiredAmount : Nat };
+        #claimStakingRewardIcp : { requiredAmount : Float };
+        #claimStakingRewardIcrc : { canister : Text; requiredAmount : Float };
+    };
+
+    public type ActionConstraint = {
+        timeConstraint : ?{
+            intervalDuration : Nat;
+            actionsPerInterval : Nat;
+        };
+        entityConstraint : ?[{
+            worldId : Text;
+            groupId : Text;
+            entityId : Text;
+            equalToAttribute : ?Text;
+            greaterThanOrEqualQuantity : ?Float;
+            lessThanQuantity : ?Float;
+            notExpired : ?Bool;
         }];
     };
-    public type ActionConfig = 
-    {
+    public type ActionConfig = {
         aid : Text;
         name : ?Text;
         description : ?Text;
-        imageUrl: ?Text;
+        imageUrl : ?Text;
         tag : ?Text;
-        actionPlugin: ?ActionPlugin;
-        actionConstraint: ?ActionConstraint;
-        actionResult: ActionResult;
+        actionPlugin : ?ActionPlugin;
+        actionConstraint : ?ActionConstraint;
+        actionResult : ActionResult;
     };
 
     public type ActionResponse = (Action, [TEntity.Entity], [MintNft], [MintToken]);
-}
+};

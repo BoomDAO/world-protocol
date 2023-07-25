@@ -328,73 +328,73 @@ actor class UserNode() {
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#spendEntityQuantity sq) {
-          let entityWid = switch (sq.0) {
+          let entityWid = switch (sq.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, sq.1, sq.2, wid) == false) {
+          if (isPermitted_(entityWid, sq.gid, sq.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
-          var _entity = getEntity_(uid, entityWid, sq.1, sq.2);
+          var _entity = getEntity_(uid, entityWid, sq.gid, sq.eid);
           switch (_entity) {
             case (?entity) {
               var _quantity = 0.0;
               var _expiration = 0;
               _quantity := Option.get(entity.quantity, 0.0);
               _expiration := Option.get(entity.expiration, 0);
-              if (Float.less(_quantity, sq.3)) {
-                return #err(sq.1 # " entityId cannot undergo spendQuantity");
+              if (Float.less(_quantity, sq.quantity)) {
+                return #err(sq.gid # " entityId cannot undergo spendQuantity");
               };
             };
             case _ {
-              return #err("You dont have entities of id: "#sq.2); 
+              return #err("You dont have entities of id: "#sq.eid); 
             };
           };
         };
         case (#receiveEntityQuantity rq) {
-          let entityWid = switch (rq.0) {
+          let entityWid = switch (rq.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, rq.1, rq.2, wid) == false) {
+          if (isPermitted_(entityWid, rq.gid, rq.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#renewEntityExpiration re) {
-          let entityWid = switch (re.0) {
+          let entityWid = switch (re.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, re.1, re.2, wid) == false) {
+          if (isPermitted_(entityWid, re.gid, re.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
         case (#reduceEntityExpiration re) {
-          let entityWid = switch (re.0) {
+          let entityWid = switch (re.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, re.1, re.2, wid) == false) {
+          if (isPermitted_(entityWid, re.gid, re.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
-          var _entity = getEntity_(uid, entityWid, re.1, re.2);
+          var _entity = getEntity_(uid, entityWid, re.gid, re.eid);
           switch (_entity) {
             case (?entity) {
               var _expiration = 0;
               _expiration := Option.get(entity.expiration, 0);
-              if (Nat.less(_expiration, re.3)) {
-                return #err(re.1 # " entityId cannot undergo reduceExpiration");
+              if (Nat.less(_expiration, re.duration)) {
+                return #err(re.gid # " entityId cannot undergo reduceExpiration");
               };
             };
             case _ {};
           };
         };
         case (#deleteEntity de) {
-          let entityWid = switch (de.0) {
+          let entityWid = switch (de.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, de.1, de.2, wid) == false) {
+          if (isPermitted_(entityWid, de.gid, de.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
@@ -425,11 +425,11 @@ actor class UserNode() {
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#receiveEntityQuantity rq) {
-          let entityWid = switch (rq.0) {
+          let entityWid = switch (rq.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, rq.1, rq.2);
+          var _entity = getEntity_(uid, entityWid, rq.gid, rq.eid);
           switch (_entity) {
             case (?entity) {
               var _quantity = 0.0;
@@ -441,7 +441,7 @@ actor class UserNode() {
                 gid = entity.gid;
                 wid = entity.wid;
                 attribute = entity.attribute;
-                quantity = ?(_quantity + rq.3);
+                quantity = ?(_quantity + rq.quantity);
                 expiration = ?_expiration; //Here we will update code for expiration TODO:
               };
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
@@ -449,24 +449,24 @@ actor class UserNode() {
             };
             case _ {
               var new_entity : EntityTypes.Entity = {
-                eid = rq.2;
+                eid = rq.eid;
                 wid = entityWid;
-                gid = rq.1;
-                quantity = ?(rq.3);
+                gid = rq.gid;
+                quantity = ?(rq.quantity);
                 expiration = null; //Here we will update code for expiration TODO:
                 attribute = null;
               };
-              _entities := entityPut4D_(_entities, uid, entityWid, rq.1, rq.2, new_entity);
+              _entities := entityPut4D_(_entities, uid, entityWid, rq.gid, rq.eid, new_entity);
               b.add(new_entity);
             };
           };
         };
         case (#spendEntityQuantity dq) {
-          let entityWid = switch (dq.0) {
+          let entityWid = switch (dq.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, dq.1, dq.2);
+          var _entity = getEntity_(uid, entityWid, dq.gid, dq.eid);
           switch (_entity) {
             case (?entity) {
               var _quantity = 0.0;
@@ -477,7 +477,7 @@ actor class UserNode() {
                 eid = entity.eid;
                 wid = entity.wid;
                 gid = entity.gid;
-                quantity = ?(_quantity - dq.3);
+                quantity = ?(_quantity - dq.quantity);
                 expiration = ?_expiration; //Here we will update code for expiration TODO:
                 attribute = entity.attribute;
               };
@@ -488,11 +488,11 @@ actor class UserNode() {
           };
         };
         case (#renewEntityExpiration re) {
-          let entityWid = switch (re.0) {
+          let entityWid = switch (re.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, re.1, re.2);
+          var _entity = getEntity_(uid, entityWid, re.gid, re.eid);
           switch (_entity) {
             case (?entity) {
               var _expiration = 0;
@@ -503,9 +503,9 @@ actor class UserNode() {
               let t : Text = Int.toText(Time.now());
               let time : Nat = Utils.textToNat(t);
               if (_expiration < time) {
-                new_expiration := time + re.3;
+                new_expiration := time + re.duration;
               } else {
-                new_expiration := _expiration + re.3;
+                new_expiration := _expiration + re.duration;
               };
               var new_entity : EntityTypes.Entity = {
                 eid = entity.eid;
@@ -522,11 +522,11 @@ actor class UserNode() {
           };
         };
         case (#reduceEntityExpiration re) {
-          let entityWid = switch (re.0) {
+          let entityWid = switch (re.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, re.1, re.2);
+          var _entity = getEntity_(uid, entityWid, re.gid, re.eid);
           switch (_entity) {
             case (?entity) {
               var _expiration = 0;
@@ -536,7 +536,7 @@ actor class UserNode() {
                 wid = entity.wid;
                 gid = entity.gid;
                 quantity = entity.quantity;
-                expiration = ?(_expiration - re.3);
+                expiration = ?(_expiration - re.duration);
                 attribute = entity.attribute;
               };
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
@@ -546,18 +546,18 @@ actor class UserNode() {
           };
         };
         case (#deleteEntity de) {
-          let entityWid = switch (de.0) {
+          let entityWid = switch (de.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          _entities := entityRemove4D_(_entities, uid, entityWid, de.1, de.2);
+          _entities := entityRemove4D_(_entities, uid, entityWid, de.gid, de.eid);
         };
         case (#setEntityAttribute sa) {
-          let entityWid = switch (sa.0) {
+          let entityWid = switch (sa.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, sa.1, sa.2);
+          var _entity = getEntity_(uid, entityWid, sa.gid, sa.eid);
           switch (_entity) {
             case (?entity) {
               var new_entity : EntityTypes.Entity = {
@@ -566,7 +566,7 @@ actor class UserNode() {
                 gid = entity.gid;
                 quantity = entity.quantity;
                 expiration = entity.expiration;
-                attribute = ?sa.3;
+                attribute = ?sa.attribute;
               };
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
               b.add(new_entity);
