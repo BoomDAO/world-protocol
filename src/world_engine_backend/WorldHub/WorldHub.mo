@@ -358,7 +358,8 @@ actor WorldHub {
         return Principal.toText(caller);
     };
 
-    public shared({caller}) func importAllUsersDataOfWorld(ofWorldId : Text, toWorldId :  Text) : async (Result.Result<Text, Text>) {
+    public shared({caller}) func importAllUsersDataOfWorld(ofWorldId : Text) : async (Result.Result<Text, Text>) {
+        let toWorldId : Text = Principal.toText(caller);
         var countOfNodesUpdated : Nat = 0;
         for (i in _nodes.vals()) {
             let node = actor (i) : actor {
@@ -374,7 +375,8 @@ actor WorldHub {
         }
     };
 
-    public shared({caller}) func importAllPermissionsOfWorld(ofWorldId : Text, toWorldId :  Text) : async (Result.Result<Text, Text>) {
+    public shared({caller}) func importAllPermissionsOfWorld(ofWorldId : Text) : async (Result.Result<Text, Text>) {
+        let toWorldId : Text = Principal.toText(caller);
         for((id, trie) in Trie.iter(_permissions)) {
             let ids = Iter.toArray(Text.tokens(id, #text("+"))); //"worldCanisterId + "+" + GroupId + "+" + EntityId"
             if(ids[0] == ofWorldId) {
@@ -401,6 +403,27 @@ actor WorldHub {
         } else {
             return #err("some error occured in userNodes, contact dev team in discord");
         }
+    };
+
+    public shared ({caller}) func getGlobalPermissionsOfWorld() : async ([TGlobal.userId]) {
+        let worldId = Principal.toText(caller);
+        return Option.get(Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal), []);
+    };
+
+    public shared ({caller}) func getEntityPermissionsOfWorld() : async [(Text, [(Text, EntityTypes.EntityPermission)])] {
+        let worldId : Text = Principal.toText(caller);
+        var b : Buffer.Buffer<(Text, [(Text, EntityTypes.EntityPermission)])> = Buffer.Buffer<(Text, [(Text, EntityTypes.EntityPermission)])>(0);
+        var a = Buffer.Buffer<(Text, EntityTypes.EntityPermission)>(0);
+        for((id, trie) in Trie.iter(_permissions)) {
+            let ids = Iter.toArray(Text.tokens(id, #text("+"))); //"worldCanisterId + "+" + GroupId + "+" + EntityId"
+            if(worldId == ids[0]) {
+                for((allowed_user, entity_permission) in Trie.iter(trie)) {
+                    a.add((allowed_user, entity_permission));
+                };
+                b.add((ids[2], Buffer.toArray(a)));
+            }
+        };
+        Buffer.toArray(b);
     };
 
 };
