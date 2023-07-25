@@ -153,35 +153,6 @@ actor class UserNode() {
     return false;
   };
 
-  private func generateActionResultOutcomes_(actionResult : ActionTypes.ActionResult) : async ([ActionTypes.ActionOutcomeOption]) {
-    var outcomes = Buffer.Buffer<ActionTypes.ActionOutcomeOption>(0);
-    for (outcome in actionResult.outcomes.vals()) {
-      var accumulated_weight : Float = 0;
-
-      //A) Compute total weight on the current outcome
-      for (outcomeOption in outcome.possibleOutcomes.vals()) {
-        accumulated_weight += outcomeOption.weight;
-      };
-
-      //B) Gen a random number using the total weight as max value
-      let rand_perc = await RandomUtil.get_random_perc();
-      var dice_outcome = (rand_perc * 1.0 * accumulated_weight);
-
-      //C Pick outcomes base on their weights
-      label outcome_loop for (outcomeOption in outcome.possibleOutcomes.vals()) {
-        let outcome_weight = outcomeOption.weight;
-        if (outcome_weight >= dice_outcome) {
-          outcomes.add(outcomeOption);
-          break outcome_loop;
-        } else {
-          dice_outcome -= outcome_weight;
-        };
-      };
-    };
-
-    return Buffer.toArray(outcomes);
-  };
-
   private func getEntity_(uid : TGlobal.userId, wid : TGlobal.worldId, gid : TGlobal.groupId, eid : TGlobal.entityId) : (?EntityTypes.Entity) {
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?w) {
@@ -239,7 +210,7 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConfig : ActionTypes.ActionConfig) : async (Result.Result<ActionTypes.Action, Text>) {
+  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint :?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.Action, Text>) {
     var action : ?ActionTypes.Action = getAction_(uid, wid, aid);
     var new_action : ?ActionTypes.Action = action;
     var _intervalStartTs : Nat = 0;
@@ -254,7 +225,7 @@ actor class UserNode() {
       };
       case _ {};
     };
-    switch (actionConfig.actionConstraint) {
+    switch (actionConstraint) {
       case (?constraints) {
         switch (constraints.timeConstraint) {
           case (?t) {
@@ -351,9 +322,8 @@ actor class UserNode() {
     return #ok(a);
   };
 
-  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConfig : ActionTypes.ActionConfig) : async (Result.Result<ActionTypes.ActionResponse, Text>) {
+  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<[EntityTypes.Entity], Text>) {
     let wid = Principal.toText(caller);
-    let outcomes : [ActionTypes.ActionOutcomeOption] = await generateActionResultOutcomes_(actionConfig.actionResult);
     // decrementQuantity check
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
@@ -434,15 +404,13 @@ actor class UserNode() {
     };
 
     var b = Buffer.Buffer<EntityTypes.Entity>(0);
-    var nftsToMintResult = Buffer.Buffer<ActionTypes.MintNft>(0);
-    var tokensToMintResult = Buffer.Buffer<ActionTypes.MintToken>(0);
 
     var response : ActionTypes.ActionResponse = ({ 
       intervalStartTs = 0; 
       actionCount = 0; 
       actionId = aid //NEW
       }, [], [], []);
-    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConfig);
+    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConstraint);
     switch (isActionConfigValid) {
       case (#ok a) {
         _actions := Trie.put3D(_actions, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
@@ -606,16 +574,11 @@ actor class UserNode() {
             case _ {};
           };
         };
-        case (#mintNft val){
-          nftsToMintResult.add(val);
-        };
-        case (#mintToken val){
-          tokensToMintResult.add(val);
+        case _ {
         };
       };
     };
-    response := (response.0, Buffer.toArray(b), Buffer.toArray(nftsToMintResult), Buffer.toArray(tokensToMintResult));
-    return #ok(response);
+    return #ok(Buffer.toArray(b));
   };
 
   public shared ({ caller }) func manuallyOverwriteEntities(uid : TGlobal.userId, gid : TGlobal.groupId, entities : [EntityTypes.Entity]) : async (Result.Result<[EntityTypes.Entity], Text>) {
