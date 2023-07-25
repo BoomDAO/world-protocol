@@ -606,14 +606,12 @@ actor class UserNode() {
   };
 
   public query func getAllUserWorldActions(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.Action], Text>) {
-    // var trie : Trie.Trie<TGlobal.entityId, ActionTypes.Action> = Trie.empty();
     var b = Buffer.Buffer<ActionTypes.Action>(0);
     switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
       case (?g) {
         switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?g) {
             for ((aid, action) in Trie.iter(g)) {
-              //trie := Trie.put(trie, Utils.keyT(aid), Text.equal, action).0;
               b.add(action);
             };
           };
@@ -624,14 +622,10 @@ actor class UserNode() {
         return #err("user not found!");
       };
     };
-    // for ((i, v) in Trie.iter(trie)) {
-    //   b.add(v);
-    // };
     return #ok(Buffer.toArray(b));
   };
 
   public query func getAllUserWorldEntities(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[EntityTypes.Entity], Text>) {
-    //var trie : Trie.Trie<TGlobal.entityId, EntityTypes.Entity> = Trie.empty();
     var b = Buffer.Buffer<EntityTypes.Entity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
@@ -639,7 +633,6 @@ actor class UserNode() {
           case (?g) {
             for ((gid, entityTrie) in Trie.iter(g)) {
               for ((eid, entity) in Trie.iter(entityTrie)) {
-                //trie := Trie.put(trie, Utils.keyT(eid), Text.equal, entity).0;
                 b.add(entity);
               };
             };
@@ -651,9 +644,6 @@ actor class UserNode() {
         return #err("user not found!");
       };
     };
-    // for ((i, v) in Trie.iter(trie)) {
-    //   b.add(v);
-    // };
     return #ok(Buffer.toArray(b));
   };
 

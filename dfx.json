@@ -11,10 +11,6 @@
     "WorldHub": {
       "main": "src/world_engine_backend/WorldHub/WorldHub.mo",
       "type": "motoko"
-    },
-    "UserNode": {
-      "main": "src/world_engine_backend/WorldHub/UserNode.mo",
-      "type": "motoko"
     }
   },
   "defaults": {
