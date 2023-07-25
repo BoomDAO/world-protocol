@@ -18,7 +18,7 @@ The World Engine has 3 separate services:
 
 To dive deeper into the World Engine, read the tech docs here: https://docs.boomdao.xyz/world-engine
 
-## VERIFYing CANISTERS BUILDS
+## VERIFYING CANISTER BUILDS
 
 To get the hash for Game Launcher canisters:
 
