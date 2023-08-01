@@ -49,8 +49,8 @@ module {
         objectUrl: ?Text;
         rarity: ?Text;
         duration: ?Nat;
-        tag: Text;
-        metadata: Text;
+        tag: ?Text;
+        metadata: ?Text;
     };
 
     public type EntityPermission = {};

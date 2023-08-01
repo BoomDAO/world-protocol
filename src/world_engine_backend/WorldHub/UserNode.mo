@@ -251,7 +251,8 @@ actor class UserNode() {
         for (e in entityConstraints.vals()) {
           let _greaterThan : Float = Option.get(e.greaterThanOrEqualQuantity, 0.0);
           let _lessThan : Float = Option.get(e.lessThanQuantity, 0.0);
-          switch (getEntity_(uid, e.worldId, e.groupId, e.entityId)) {
+          var worldId = Option.get(e.worldId, wid);
+          switch (getEntity_(uid, worldId, e.groupId, e.entityId)) {
             case (?entity) {
               let _quantity = Option.get(entity.quantity, 0.0);
               let _expiration = Option.get(entity.expiration, 0);
