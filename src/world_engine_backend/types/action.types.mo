@@ -124,7 +124,7 @@ module {
             actionsPerInterval : Nat;
         };
         entityConstraint : ?[{
-            worldId : Text;
+            worldId : ?Text;
             groupId : Text;
             entityId : Text;
             equalToAttribute : ?Text;
