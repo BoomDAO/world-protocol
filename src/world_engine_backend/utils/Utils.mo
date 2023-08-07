@@ -98,7 +98,7 @@ module {
         return f;
     };
 
-    public func textToarray(text : Text) : async ([Nat8]) {
+    public func textToarray(text : Text) : ([Nat8]) {
         var blob : Blob = Text.encodeUtf8(text);
         var array : [Nat8] = Blob.toArray(blob);
         return array;
