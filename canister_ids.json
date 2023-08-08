@@ -1,11 +1,11 @@
 {
-  "PaymentHub": {
-    "ic": "5hr3g-hqaaa-aaaap-abbxa-cai"
-  },
-  "StakingHub": {
-    "ic": "jozll-yaaaa-aaaap-abf5q-cai"
-  },
-  "WorldHub": {
-    "ic": "j362g-ziaaa-aaaap-abf6a-cai"
-  }
+    "PaymentHub": {
+        "ic": "5hr3g-hqaaa-aaaap-abbxa-cai"
+    },
+    "StakingHub": {
+        "ic": "jozll-yaaaa-aaaap-abf5q-cai"
+    },
+    "WorldHub": {
+        "ic": "j362g-ziaaa-aaaap-abf6a-cai"
+    }
 }
