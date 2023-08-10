@@ -29,29 +29,39 @@ import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
+import TGlobal "./global.types";
+
 module {
+
     public type Entity = {
-        eid : Text;
-        gid : Text;
-        wid : Text;
+        wid : TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
         attribute : ?Text;
         quantity : ?Float;
         expiration : ?Nat;
     };
 
-    public type EntityConfig = 
-    {
-        eid: Text;
-        gid: Text;
-        name: ?Text;
-        description: ?Text;
-        imageUrl: ?Text;
-        objectUrl: ?Text;
-        rarity: ?Text;
-        duration: ?Nat;
-        tag: ?Text;
-        metadata: ?Text;
+    public type EntityConfig = {
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+        name : ?Text;
+        description : ?Text;
+        imageUrl : ?Text;
+        objectUrl : ?Text;
+        rarity : ?Text;
+        duration : ?Nat;
+        tag : ?Text;
+        metadata : ?Text;
     };
 
-    public type EntityPermission = {};
+    public type EntityPermission = {
+        wid : TGlobal.worldId;
+        gid : TGlobal.groupId;
+        eid : TGlobal.entityId;
+    };
+
+    public type GlobalPermission = {
+        wid : TGlobal.worldId;
+    };
 };
