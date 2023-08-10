@@ -544,11 +544,6 @@ actor StakingHub {
   let period : Timer.Duration = #seconds(24 * 60 * 60); //duration set to 24hrs
   let cron = Timer.recurringTimer(period, processWithdrawal_);
 
-  public shared (msg) func killCron() : async () {
-    assert (Principal.toText(msg.caller) == ENV.StakingHubAdmin);
-    Timer.cancelTimer(cron);
-  };
-
   //User Queries
   public query func getUserStakes(user_id : Text) : async ([TStaking.Stake]) {
     var b : Buffer.Buffer<TStaking.Stake> = Buffer.Buffer<TStaking.Stake>(0);

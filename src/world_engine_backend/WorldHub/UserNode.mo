@@ -43,7 +43,7 @@ actor class UserNode() {
   private stable var _entities : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.groupId, Trie.Trie<TGlobal.entityId, EntityTypes.Entity>>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [groupId -> [entities]]]]
   private stable var _actions : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.Action>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
-  private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
+  private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
   // Internal functions
   //
@@ -210,7 +210,7 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint :?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.Action, Text>) {
+  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.Action, Text>) {
     var action : ?ActionTypes.Action = getAction_(uid, wid, aid);
     var new_action : ?ActionTypes.Action = action;
     var _intervalStartTs : Nat = 0;
@@ -251,19 +251,19 @@ actor class UserNode() {
         for (e in entityConstraints.vals()) {
           let _greaterThan : Float = Option.get(e.greaterThanOrEqualQuantity, 0.0);
           let _lessThan : Float = Option.get(e.lessThanQuantity, 0.0);
-          var worldId = Option.get(e.worldId, wid);
-          switch (getEntity_(uid, worldId, e.groupId, e.entityId)) {
+          var worldId = Option.get(e.wid, wid);
+          switch (getEntity_(uid, worldId, e.gid, e.eid)) {
             case (?entity) {
               let _quantity = Option.get(entity.quantity, 0.0);
               let _expiration = Option.get(entity.expiration, 0);
               let _attribute = Option.get(entity.attribute, "");
               //quantity check
               if (_greaterThan != 0.0 and _lessThan != 0.0) {
-                if (_quantity > _lessThan or _quantity < _greaterThan) return #err("entity quantity is not in EntityContraints greaterThan and lessThan range");
+                if (_quantity >= _lessThan or _quantity < _greaterThan) return #err("entity quantity is not in EntityContraints greaterThan and lessThan range");
               } else if (_lessThan == 0.0) {
                 if (_quantity < _greaterThan) return #err("entity quantity does not pass greaterThan EntityContraints");
               } else if (_greaterThan == 0.0) {
-                if (_quantity > _lessThan) return #err("entity quantity does not pass lessThan EntityContraints");
+                if (_quantity >= _lessThan) return #err("entity quantity does not pass lessThan EntityContraints");
               };
 
               //expiration check
@@ -273,7 +273,11 @@ actor class UserNode() {
                     if (_expiration < Time.now()) {
                       return #err("entity expired as per EntityContraints expiration");
                     };
-                  } else {};
+                  } else {
+                    if (_expiration >= Time.now()) {
+                      return #err("entity must be expired");
+                    };
+                  };
                 };
                 case _ {};
               };
@@ -288,14 +292,15 @@ actor class UserNode() {
                 case _ {};
               };
             };
-            case _ {//If u dont have the entity
+            case _ {
+              //If u dont have the entity
 
-              if(_greaterThan > 0 ) return #err("You don't have entity of id: "#e.entityId#" that meets quantity requirement of: "# Float.toText(_greaterThan));
-              
+              if (_greaterThan > 0) return #err("You don't have entity of id: " #e.eid # " that meets quantity requirement of: " # Float.toText(_greaterThan));
+
               //expiration check
               switch (e.notExpired) {
                 case (?bool) {
-                  return #err("You don't have entity of id: "#e.entityId#", therefore you dont meet requirement ");
+                  return #err("You don't have entity of id: " #e.eid # ", therefore you dont meet requirement ");
                 };
                 case _ {};
               };
@@ -303,7 +308,7 @@ actor class UserNode() {
               //attribute check
               switch (e.equalToAttribute) {
                 case (?a) {
-                  return #err("You don't have entity of id: "#e.entityId#", therefore you dont meet requirement ");
+                  return #err("You don't have entity of id: " #e.eid # ", therefore you dont meet requirement ");
                 };
                 case _ {};
               };
@@ -318,7 +323,7 @@ actor class UserNode() {
     let a : ActionTypes.Action = {
       intervalStartTs = _intervalStartTs;
       actionCount = _actionCount;
-      actionId = aid;//NEW
+      actionId = aid; //NEW
     };
     return #ok(a);
   };
@@ -348,7 +353,7 @@ actor class UserNode() {
               };
             };
             case _ {
-              return #err("You dont have entities of id: "#sq.eid); 
+              return #err("You dont have entities of id: " #sq.eid);
             };
           };
         };
@@ -406,11 +411,16 @@ actor class UserNode() {
 
     var b = Buffer.Buffer<EntityTypes.Entity>(0);
 
-    var response : ActionTypes.ActionResponse = ({ 
-      intervalStartTs = 0; 
-      actionCount = 0; 
-      actionId = aid //NEW
-      }, [], [], []);
+    var response : ActionTypes.ActionResponse = (
+      {
+        intervalStartTs = 0;
+        actionCount = 0;
+        actionId = aid //NEW
+      },
+      [],
+      [],
+      [],
+    );
     let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConstraint);
     switch (isActionConfigValid) {
       case (#ok a) {
@@ -418,7 +428,7 @@ actor class UserNode() {
         response := (a, [], [], []);
       };
       case (#err a) {
-        return #err("Error: "#a);
+        return #err("Error: " #a);
       };
     };
 
@@ -519,7 +529,23 @@ actor class UserNode() {
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
               b.add(new_entity);
             };
-            case _ {};
+            case _ {
+
+              let t : Text = Int.toText(Time.now());
+              let time : Nat = Utils.textToNat(t);
+              var new_expiration = time + re.duration;
+
+              var new_entity : EntityTypes.Entity = {
+                eid = re.eid;
+                wid = entityWid;
+                gid = re.gid;
+                quantity = null;
+                expiration = ?new_expiration;
+                attribute = null;
+              };
+              _entities := entityPut4D_(_entities, uid, entityWid, re.gid, re.eid, new_entity);
+              b.add(new_entity);
+            };
           };
         };
         case (#reduceEntityExpiration re) {
@@ -572,11 +598,22 @@ actor class UserNode() {
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
               b.add(new_entity);
             };
-            case _ {};
+            case _ {
+
+              var new_entity : EntityTypes.Entity = {
+                eid = sa.eid;
+                wid = entityWid;
+                gid = sa.gid;
+                quantity = null;
+                expiration = null;
+                attribute = ?sa.attribute;
+              };
+              _entities := entityPut4D_(_entities, uid, entityWid, sa.gid, sa.eid, new_entity);
+              b.add(new_entity);
+            };
           };
         };
-        case _ {
-        };
+        case _ {};
       };
     };
     return #ok(Buffer.toArray(b));
@@ -682,50 +719,50 @@ actor class UserNode() {
 
   //World Canister Permission Rules
   //
-  public shared ({ caller }) func grantEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text, permission : EntityTypes.EntityPermission) : async () {
+  public shared ({ caller }) func grantEntityPermission(callerWorldId : Text, permission : EntityTypes.EntityPermission) : async () {
     assert (isWorldHub_(caller));
-    let k = worldId # "+" #groupId # "+" #entityId;
-    _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal, permission);
+    let k = callerWorldId # "+" #permission.gid # "+" #permission.eid;
+    _permissions := Trie.put2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(permission.wid), Text.equal, permission);
   };
 
-  public shared ({ caller }) func removeEntityPermission(worldId : Text, groupId : Text, entityId : Text, principal : Text) : async () {
+  public shared ({ caller }) func removeEntityPermission(callerWorldId : Text, permission : EntityTypes.EntityPermission) : async () {
     assert (isWorldHub_(caller));
-    let k = worldId # "+" #groupId # "+" #entityId;
+    let k = callerWorldId # "+" #permission.gid # "+" #permission.eid;
     switch (Trie.find(_permissions, Utils.keyT(k), Text.equal)) {
       case (?p) {
-        _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(principal), Text.equal).0;
+        _permissions := Trie.remove2D(_permissions, Utils.keyT(k), Text.equal, Utils.keyT(permission.wid), Text.equal).0;
       };
       case _ {};
     };
   };
 
-  public shared ({ caller }) func grantGlobalPermission(worldId : TGlobal.worldId, principal : Text) : async () {
+  public shared ({ caller }) func grantGlobalPermission(callerWorldId : Text, permission : EntityTypes.GlobalPermission) : async () {
     assert (isWorldHub_(caller));
-    switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
+    switch (Trie.find(_globalPermissions, Utils.keyT(callerWorldId), Text.equal)) {
       case (?p) {
         var b : Buffer.Buffer<Text> = Buffer.fromArray(p);
-        b.add(principal);
-        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(worldId), Text.equal, Buffer.toArray(b)).0;
+        b.add(permission.wid);
+        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(callerWorldId), Text.equal, Buffer.toArray(b)).0;
       };
       case _ {
         var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
-        b.add(principal);
-        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(worldId), Text.equal, Buffer.toArray(b)).0;
+        b.add(permission.wid);
+        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(callerWorldId), Text.equal, Buffer.toArray(b)).0;
       };
     };
   };
 
-  public shared ({ caller }) func removeGlobalPermission(worldId : TGlobal.worldId, principal : Text) : async () {
+  public shared ({ caller }) func removeGlobalPermission(callerWorldId : Text, permission : EntityTypes.GlobalPermission) : async () {
     assert (isWorldHub_(caller));
-    switch (Trie.find(_globalPermissions, Utils.keyT(worldId), Text.equal)) {
+    switch (Trie.find(_globalPermissions, Utils.keyT(callerWorldId), Text.equal)) {
       case (?p) {
         var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
         for (i in p.vals()) {
-          if (i != principal) {
+          if (i != permission.wid) {
             b.add(i);
           };
         };
-        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(worldId), Text.equal, Buffer.toArray(b)).0;
+        _globalPermissions := Trie.put(_globalPermissions, Utils.keyT(callerWorldId), Text.equal, Buffer.toArray(b)).0;
       };
       case _ {};
     };
@@ -736,7 +773,7 @@ actor class UserNode() {
     assert (isWorldHub_(caller));
     _permissions := Trie.put(_permissions, Utils.keyT(key), Text.equal, permissions).0;
   };
-  public shared ({ caller }) func synchronizeGlobalPermissions(permissions : Trie.Trie<TGlobal.worldId, [Text]>) : async () {
+  public shared ({ caller }) func synchronizeGlobalPermissions(permissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]>) : async () {
     assert (isWorldHub_(caller));
     _globalPermissions := permissions;
   };
@@ -744,7 +781,7 @@ actor class UserNode() {
   //To Import User <-> World <-> Configs related endpoints
   public shared ({ caller }) func importAllUsersDataOfWorld(ofWorldId : Text, toWorldId : Text) : async (Result.Result<Text, Text>) {
     assert (isWorldHub_(caller));
-    for((userId, user_data) in Trie.iter(_entities)) {
+    for ((userId, user_data) in Trie.iter(_entities)) {
       switch (Trie.find(user_data, Utils.keyT(ofWorldId), Text.equal)) {
         case (?user_world_data) {
           var new_user_data = user_data;
@@ -755,7 +792,7 @@ actor class UserNode() {
       };
     };
 
-    for((userId, user_data) in Trie.iter(_actions)) {
+    for ((userId, user_data) in Trie.iter(_actions)) {
       switch (Trie.find(user_data, Utils.keyT(ofWorldId), Text.equal)) {
         case (?user_world_data) {
           var new_user_data = user_data;

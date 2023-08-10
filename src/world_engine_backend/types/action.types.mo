@@ -32,7 +32,7 @@ module {
 
     public type ActionArg = {
         #default : { actionId : Text };
-        #burnNft : { actionId : Text; index : Nat32 };
+        #verifyBurnNfts : { actionId : Text; indexes : [Nat32] };
         #verifyTransferIcp : { actionId : Text; blockIndex : Nat64 };
         #verifyTransferIcrc : { actionId : Text; blockIndex : Nat };
         #claimStakingRewardNft : { actionId : Text };
@@ -106,7 +106,7 @@ module {
     };
 
     public type ActionPlugin = {
-        #burnNft : { canister : Text };
+        #verifyBurnNfts : { canister : Text; requiredNftMetadata : ?[Text] };
         #verifyTransferIcp : { amt : Float; toPrincipal : Text };
         #verifyTransferIcrc : {
             canister : Text;
@@ -124,9 +124,9 @@ module {
             actionsPerInterval : Nat;
         };
         entityConstraint : ?[{
-            worldId : ?Text;
-            groupId : Text;
-            entityId : Text;
+            wid : ?TGlobal.worldId;
+            gid : TGlobal.groupId;
+            eid : TGlobal.entityId;
             equalToAttribute : ?Text;
             greaterThanOrEqualQuantity : ?Float;
             lessThanQuantity : ?Float;
