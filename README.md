@@ -2,9 +2,9 @@
   <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/game-launcher/assets/29381374/875537bb-f9d4-4594-84e0-a7375ce46213" alt="my banner"></a>
 </p>
 
-## WORLD ENGINE
+## WORLD ENGINE PROTOCOL
 
-A comprehensive, fully on-chain **World Engine** that provides a universal game-centric database, modular game logic, composable data standards, and customizable access control for interactions across game worlds. All worlds built with the World Engine are interoperable from Day 1. It's further enriched with functionalities for NFT/ICP/ICRC payments, staking, minting, and burning.
+A comprehensive, fully on-chain **game server protocol** that provides a universal game-centric database, modular game logic, composable data standards, and customizable access control for interactions across game worlds. All worlds built with the World Engine Protocol are interoperable from Day 1. It's further enriched with functionalities for NFT/ICP/ICRC payments, staking, minting, and burning.
 
 The World Engine has 3 separate services:
 
@@ -24,7 +24,7 @@ To dive deeper into the World Engine, read the tech docs here: https://docs.boom
 
 ## VERIFYING CANISTER BUILDS
 
-To get the hash for Game Launcher canisters:
+To get the hash for World Engine Protocol canisters:
 
 - Get the canister IDs from [`canister_ids.json`](https://github.com/BoomDAO/world-engine/blob/main/canister_ids.json).
 - Get hash using the DFX SDK by running: `dfx canister --network ic info <canister-id>`.
