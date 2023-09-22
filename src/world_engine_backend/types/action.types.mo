@@ -50,36 +50,6 @@ module {
         assetId : Text;
         metadata : Text;
     };
-    public type SetEntityAttribute = {
-        wid : ?TGlobal.worldId;
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
-        attribute : attribute;
-    };
-    public type SpendEntityQuantity = {
-        wid : ?TGlobal.worldId;
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
-        quantity : quantity;
-    };
-    public type ReceiveEntityQuantity = {
-        wid : ?TGlobal.worldId;
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
-        quantity : quantity;
-    };
-    public type RenewEntityExpiration = {
-        wid : ?TGlobal.worldId;
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
-        duration : duration;
-    };
-    public type ReduceEntityExpiration = {
-        wid : ?TGlobal.worldId;
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
-        duration : duration;
-    };
     public type DeleteEntity = {
         wid : ?TGlobal.worldId;
         gid : TGlobal.groupId;
@@ -90,12 +60,42 @@ module {
         option : {
             #mintToken : MintToken;
             #mintNft : MintNft;
-            #setEntityAttribute : SetEntityAttribute;
-            #spendEntityQuantity : SpendEntityQuantity;
-            #receiveEntityQuantity : ReceiveEntityQuantity;
-            #renewEntityExpiration : RenewEntityExpiration;
-            #reduceEntityExpiration : ReduceEntityExpiration;
             #deleteEntity : DeleteEntity;
+            #renewTimestamp : {
+                wid : ?TGlobal.worldId;
+                gid : TGlobal.groupId;
+                eid : TGlobal.entityId;
+                field : Text;
+                value : Nat;
+            };
+            #setString : {
+                wid : ?TGlobal.worldId;
+                gid : TGlobal.groupId;
+                eid : TGlobal.entityId;
+                field : Text;
+                value : Text;
+            };
+            #setNumber : {
+                wid : ?TGlobal.worldId;
+                gid : TGlobal.groupId;
+                eid : TGlobal.entityId;
+                field : Text;
+                value : Float;
+            };
+            #decrementNumber : {
+                wid : ?TGlobal.worldId;
+                gid : TGlobal.groupId;
+                eid : TGlobal.entityId;
+                field : Text;
+                value : Float;
+            };
+            #incrementNumber : {
+                wid : ?TGlobal.worldId;
+                gid : TGlobal.groupId;
+                eid : TGlobal.entityId;
+                field : Text;
+                value : Float;
+            };
         };
     };
     public type ActionOutcome = {
@@ -117,7 +117,6 @@ module {
         #claimStakingRewardIcp : { requiredAmount : Float };
         #claimStakingRewardIcrc : { canister : Text; requiredAmount : Float };
     };
-
     public type ActionConstraint = {
         timeConstraint : ?{
             intervalDuration : Nat;
@@ -127,10 +126,14 @@ module {
             wid : ?TGlobal.worldId;
             gid : TGlobal.groupId;
             eid : TGlobal.entityId;
-            equalToAttribute : ?Text;
-            greaterThanOrEqualQuantity : ?Float;
-            lessThanQuantity : ?Float;
-            notExpired : ?Bool;
+            fieldName : Text;
+            validation : {
+                #greaterThanNumber : Float;
+                #lessThanNumber : Float;
+                #equalToNumber : Float;
+                #equalToString : Text;
+                #greaterThanNowTs : Nat;
+            };
         }];
     };
     public type ActionConfig = {
