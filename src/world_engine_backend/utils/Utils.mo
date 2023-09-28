@@ -95,6 +95,8 @@ module {
             };
         };
 
+        if(Text.contains(t, #char '-')) return -f;
+        
         return f;
     };
 
@@ -114,4 +116,10 @@ module {
             };
         };
     };
+    public func intToNat(value : Int) : (Nat) {
+        if(value < 0) {
+            return 0;
+        };
+        return textToNat(Int.toText(value));
+    }
 };
