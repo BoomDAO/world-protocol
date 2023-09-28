@@ -209,7 +209,7 @@ actor WorldHub {
                 var canister_id : Text = "";
                 label _check for (can_id in _nodes.vals()) {
                     var size : Nat32 = countUsers_(can_id);
-                    if (size < 1000) {
+                    if (size < 20) {
                         canister_id := can_id;
                         _uids := Trie.put(_uids, Utils.keyT(_uid), Text.equal, canister_id).0;
                         break _check;

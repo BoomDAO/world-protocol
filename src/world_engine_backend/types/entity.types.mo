@@ -47,15 +47,13 @@ module {
         fields : [(Text, Text)];
     };
 
-    public type EntityConfig = {
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
+    public type Config = {
+        cid : TGlobal.groupId;
         fields : Map.Map<Text, Text>;
     };
 
-    public type StableEntityConfig = {
-        gid : TGlobal.groupId;
-        eid : TGlobal.entityId;
+    public type StableConfig = {
+        cid : TGlobal.configId;
         fields : [(Text, Text)];
     };
 

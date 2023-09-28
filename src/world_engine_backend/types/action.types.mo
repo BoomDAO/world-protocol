@@ -24,7 +24,7 @@ module {
     public type quantity = Float;
     public type duration = Nat;
 
-    public type Action = {
+    public type ActionState = {
         actionId : Text;
         intervalStartTs : Nat;
         actionCount : Nat;
@@ -130,13 +130,16 @@ module {
             validation : {
                 #greaterThanNumber : Float;
                 #lessThanNumber : Float;
+                #greaterThanEqualToNumber : Float;
+                #lessThanEqualToNumber : Float;
                 #equalToNumber : Float;
                 #equalToString : Text;
-                #greaterThanNowTs : Nat;
+                #greaterThanNowTimestamp;
+                #lessThanNowTimestamp;
             };
         }];
     };
-    public type ActionConfig = {
+    public type Action = {
         aid : Text;
         name : ?Text;
         description : ?Text;
@@ -147,5 +150,5 @@ module {
         actionResult : ActionResult;
     };
 
-    public type ActionResponse = (Action, [TEntity.Entity], [MintNft], [MintToken]);
+    public type ActionResponse = (ActionState, [TEntity.Entity], [MintNft], [MintToken]);
 };

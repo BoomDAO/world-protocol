@@ -42,7 +42,7 @@ actor class UserNode() {
   // stable memory
   let { ihash; nhash; thash; phash; calcHash } = Map;
   private stable var _entities : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.groupId, Trie.Trie<TGlobal.entityId, EntityTypes.Entity>>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [groupId -> [entities]]]]
-  private stable var _actions : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.Action>>> = Trie.empty();
+  private stable var _actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.ActionState>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
@@ -186,8 +186,8 @@ actor class UserNode() {
     };
   };
 
-  private func getAction_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId) : (?ActionTypes.Action) {
-    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
+  private func getActionState_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId) : (?ActionTypes.ActionState) {
+    switch (Trie.find(_actionStates, Utils.keyT(uid), Text.equal)) {
       case (?w) {
         switch (Trie.find(w, Utils.keyT(wid), Text.equal)) {
           case (?a) {
@@ -211,9 +211,9 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.Action, Text>) {
-    var action : ?ActionTypes.Action = getAction_(uid, wid, aid);
-    var new_action : ?ActionTypes.Action = action;
+  private func validateAction_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.ActionState, Text>) {
+    var action : ?ActionTypes.ActionState = getActionState_(uid, wid, aid);
+    var new_actionState : ?ActionTypes.ActionState = action;//TODO: WHY IS THIS NOT BEING USED
     var _intervalStartTs : Nat = 0;
     var _actionCount : Nat = 0;
     var _quantity = ?0.0;
@@ -256,32 +256,57 @@ actor class UserNode() {
               // switch (Trie.find(entity.fields, Utils.keyT(e.fieldName), Text.equal))
               switch (Map.get(entity.fields, thash, e.fieldName)) {
                 case (?current_val) {
-                  let current_val_in_float = Utils.textToFloat(current_val);
-                  let current_val_in_Nat = Utils.textToNat(current_val);
                   switch (e.validation) {
                     case (#greaterThanNumber val) {
-                      if (current_val_in_float < val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float <= val) {
                         return #err("entity field : " #e.fieldName # " is less than " #Float.toText(val) # ", does not pass EntityConstraints");
                       };
                     };
                     case (#lessThanNumber val) {
-                      if (current_val_in_float > val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float >= val) {
                         return #err("entity field : " #e.fieldName # " is greater than " #Float.toText(val) # ", does not pass EntityConstraints");
                       };
                     };
                     case (#equalToNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
                       if (current_val_in_float != val) {
-                        return #err("entity field : " #e.fieldName # " is not equal to " #Float.toText(val) # ",does not pass EntityConstraints");
+                        return #err("entity field : " #e.fieldName # " is not equal to " #Float.toText(val) # ", does not pass EntityConstraints");
                       };
                     };
                     case (#equalToString val) {
                       if (current_val != val) {
-                        return #err("entity field : " #e.fieldName # " is not equal to " #val # ",does not pass EntityConstraints");
+                        return #err("entity field : " #e.fieldName # " is not equal to " #val # ", does not pass EntityConstraints");
                       };
                     };
-                    case (#greaterThanNowTs val) {
-                      if (current_val_in_Nat < val) {
-                        return #err("entity field : " #e.fieldName # " is greater than " #Int.toText(val) # ",does not pass EntityConstraints");
+                    case (#greaterThanNowTimestamp) {
+                      let current_val_in_Nat = Utils.textToNat(current_val);
+                      if (current_val_in_Nat < Time.now()) {
+                        return #err("entity field : " #e.fieldName # " Time.Now is greater than current value, does not pass EntityConstraints, "#Nat.toText(current_val_in_Nat)#" < "#Int.toText(Time.now()));
+                      };
+                    };
+                    case (#lessThanNowTimestamp) {
+                      let current_val_in_Nat = Utils.textToNat(current_val);
+                      if (current_val_in_Nat > Time.now()) {
+                        return #err("entity field : " #e.fieldName # " Time.Now is lesser than current value, does not pass EntityConstraints, "#Nat.toText(current_val_in_Nat)#" > "#Int.toText(Time.now()));
+                      };
+                    };
+                    case (#greaterThanEqualToNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float < val) {
+                        return #err("entity field : " #e.fieldName # " is less than " #Float.toText(val) # ", does not pass EntityConstraints");
+                      };
+                    };
+                    case (#lessThanEqualToNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float > val) {
+                        return #err("entity field : " #e.fieldName # " is greater than " #Float.toText(val) # ", does not pass EntityConstraints");
                       };
                     };
                   };
@@ -293,7 +318,7 @@ actor class UserNode() {
             };
             case _ {
               //If u dont have the entity
-              return #err("You don't have entity of id: " #e.eid # " to match EntityConstraints");
+              return #err("You don't have entity of id: " #e.eid # ", gid: "#e.gid#" to match EntityConstraints");
             };
           };
         };
@@ -301,7 +326,7 @@ actor class UserNode() {
       case _ {};
     };
 
-    let a : ActionTypes.Action = {
+    let a : ActionTypes.ActionState = {
       intervalStartTs = _intervalStartTs;
       actionCount = _actionCount;
       actionId = aid; //NEW
@@ -311,7 +336,7 @@ actor class UserNode() {
 
   public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     let wid = Principal.toText(caller);
-    // decrementQuantity check
+    //checks
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
         case (#decrementNumber val) {
@@ -327,12 +352,7 @@ actor class UserNode() {
             case (?entity) {
               // switch (Trie.find(entity.fields, Utils.keyT(val.field), Text.equal)) {
               switch (Map.get(entity.fields, thash, val.field)) {
-                case (?current_val) {
-                  let current_val_in_float = Utils.textToFloat(current_val);
-                  if (Float.less(current_val_in_float, val.value)) {
-                    return #err("decrementNumber value is greater than current value of field : " #val.field);
-                  };
-                };
+                case (?current_val) { };
                 case _ {
                   return #err(val.eid # " Entity does not contain field : " #val.field # ", can't decrementNumber from a non-existing entity field");
                 };
@@ -369,22 +389,6 @@ actor class UserNode() {
           if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              // switch (Trie.find(entity.fields, Utils.keyT(val.field), Text.equal))
-              switch (Map.get(entity.fields, thash, val.field)) {
-                case (?current_val) {
-                  let current_val_in_Nat = Utils.textToNat(current_val);
-                  if (Time.now() > current_val_in_Nat) {
-                    return #err("renewTimestamp value is less than current timestamp for field : " #val.field);
-                  };
-                };
-                case _ {};
-              };
-            };
-            case _ {};
-          };
         };
         case _ {};
       };
@@ -402,10 +406,10 @@ actor class UserNode() {
       [],
       [],
     );
-    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConstraint);
-    switch (isActionConfigValid) {
+    let isActionValid = await validateAction_(uid, wid, aid, actionConstraint);
+    switch (isActionValid) {
       case (#ok a) {
-        _actions := Trie.put3D(_actions, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
+        _actionStates := Trie.put3D(_actionStates, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
         response := (a, [], [], []);
       };
       case (#err a) {
@@ -609,7 +613,21 @@ actor class UserNode() {
           switch (_entity) {
             case (?entity) {
               var _fields = entity.fields;
-              ignore Map.put(_fields, thash, val.field, Int.toText(val.value));
+
+              switch(Map.get(_fields, thash, val.field)){
+                case (?current_val) {
+                  let current_val_in_nat = Utils.textToNat(current_val);
+
+                  if(current_val_in_nat > Time.now()) {
+                    ignore Map.put(_fields, thash, val.field, Nat.toText(current_val_in_nat + val.value));
+                  }
+                  else ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
+                };
+                case _ {
+                  ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
+                };
+              };
+
               var new_entity : EntityTypes.Entity = {
                 eid = entity.eid;
                 gid = entity.gid;
@@ -626,7 +644,7 @@ actor class UserNode() {
             };
             case _ {
               var _fields = Map.new<Text, Text>();
-              ignore Map.put(_fields, thash, val.field, Int.toText(val.value));
+              ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
               var new_entity : EntityTypes.Entity = {
                 eid = val.eid;
                 gid = val.gid;
@@ -686,9 +704,9 @@ actor class UserNode() {
     Cycles.balance();
   };
 
-  public query func getAllUserWorldActions(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.Action], Text>) {
-    var b = Buffer.Buffer<ActionTypes.Action>(0);
-    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
+  public query func getAllUserActionStates(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.ActionState], Text>) {
+    var b = Buffer.Buffer<ActionTypes.ActionState>(0);
+    switch (Trie.find(_actionStates, Utils.keyT(uid), Text.equal)) {
       case (?g) {
         switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?g) {
@@ -706,7 +724,7 @@ actor class UserNode() {
     return #ok(Buffer.toArray(b));
   };
 
-  public query func getAllUserWorldEntities(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+  public query func getAllUserEntities(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     var b = Buffer.Buffer<EntityTypes.StableEntity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
@@ -733,7 +751,7 @@ actor class UserNode() {
     return #ok(Buffer.toArray(b));
   };
 
-  public query func getSpecificUserWorldEntities(uid : TGlobal.userId, wid : TGlobal.worldId, eids : [(TGlobal.groupId, TGlobal.entityId)]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+  public query func getSpecificUserEntities(uid : TGlobal.userId, wid : TGlobal.worldId, eids : [(TGlobal.groupId, TGlobal.entityId)]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     var b = Buffer.Buffer<EntityTypes.StableEntity>(0);
     for ((gid, eid) in eids.vals()) {
       switch (getEntity_(uid, wid, gid, eid)) {
@@ -845,12 +863,12 @@ actor class UserNode() {
       };
     };
 
-    for ((userId, user_data) in Trie.iter(_actions)) {
+    for ((userId, user_data) in Trie.iter(_actionStates)) {
       switch (Trie.find(user_data, Utils.keyT(ofWorldId), Text.equal)) {
         case (?user_world_data) {
           var new_user_data = user_data;
           new_user_data := Trie.put(new_user_data, Utils.keyT(toWorldId), Text.equal, user_world_data).0;
-          _actions := Trie.put(_actions, Utils.keyT(userId), Text.equal, new_user_data).0;
+          _actionStates := Trie.put(_actionStates, Utils.keyT(userId), Text.equal, new_user_data).0;
         };
         case _ {};
       };
