@@ -476,11 +476,9 @@ actor class UserNode() {
           switch (_entity) {
             case (?entity) {
               var _fields = entity.fields;
-              // switch (Trie.find(entity.fields, Utils.keyT(val.field), Text.equal))
               switch (Map.get(entity.fields, thash, val.field)) {
                 case (?current_val) {
                   let current_val_in_float = Utils.textToFloat(current_val);
-                  // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(Float.sub(current_val_in_float, val.value))).0;
                   ignore Map.put(_fields, thash, val.field, Float.toText(Float.sub(current_val_in_float, val.value)));
                 };
                 case _ {
@@ -515,15 +513,12 @@ actor class UserNode() {
           switch (_entity) {
             case (?entity) {
               var _fields = entity.fields;
-              // switch (Trie.find(entity.fields, Utils.keyT(val.field), Text.equal))
               switch (Map.get(entity.fields, thash, val.field)) {
                 case (?current_val) {
                   let current_val_in_float = Utils.textToFloat(current_val);
-                  // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(Float.add(current_val_in_float, val.value))).0;
                   ignore Map.put(_fields, thash, val.field, Float.toText(Float.add(current_val_in_float, val.value)));
                 };
                 case _ {
-                  // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(val.value)).0;
                   ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
                 };
               };

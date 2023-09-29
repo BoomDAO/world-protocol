@@ -53,17 +53,6 @@ actor WorldHub {
     private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
     private func WorldHubCanisterId() : Principal = Principal.fromActor(WorldHub);
 
-    private var userNodeWasmModule : Buffer.Buffer<Nat8> = Buffer.Buffer<Nat8>(0);
-    private stable var stableUserNodeWasmModule : [Nat8] = [];
-
-    system func preupgrade() {
-        stableUserNodeWasmModule := Buffer.toArray(userNodeWasmModule);
-    };
-    system func postupgrade() {
-        userNodeWasmModule := Buffer.fromArray(stableUserNodeWasmModule);
-        stableUserNodeWasmModule := [];
-    };
-
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
         var count : Nat32 = 0;
@@ -436,37 +425,27 @@ actor WorldHub {
         Buffer.toArray(b);
     };
 
-    public shared ({ caller }) func cleanUserNodeWasm() : async () {
-        assert (isAdmin_(caller));
-        userNodeWasmModule := Buffer.fromArray([]);
+    // custom SNS functions for upgrading UserNodes which are under control of WorldHub canister
+    public shared ({ caller }) func validate_upgrade_usernodes(usernode_wasm_module : Blob) : async ({
+        #Ok : Text;
+        #Err : Text;
+    }) {
+        // assert (caller == Principal.fromText(""));
+        return #Ok("passed");
     };
 
-    public shared ({ caller }) func uploadUserNodeWasmChunk(chunk : [Nat8]) : async () {
-        assert (isAdmin_(caller));
-        for (i in chunk.vals()) {
-            userNodeWasmModule.add(i);
-        };
-    };
-
-    public query func getUserNodeWasmModule() : async [Nat8] {
-        return Buffer.toArray(userNodeWasmModule);
-    };
-
-    public shared ({ caller }) func upgradeUserNodes() : async ([Text]) {
-        assert (isAdmin_(caller));
-        var updated_user_nodes = Buffer.Buffer<Text>(0);
+    public shared ({ caller }) func upgrade_usernodes(usernode_wasm_module : Blob) : async () {
+        // assert (caller == Principal.fromText(""));
         for (node in _nodes.vals()) {
             let IC : Management.Management = actor (ENV.IC_Management);
             await IC.install_code({
                 arg = [];
-                wasm_module = Blob.fromArray(Buffer.toArray(userNodeWasmModule));
-                mode = #upgrade;
+                wasm_module = usernode_wasm_module;
+                mode = #reinstall;
                 canister_id = Principal.fromText(node);
                 sender_canister_version = null;
             });
-            updated_user_nodes.add(node);
         };
-        return Buffer.toArray(updated_user_nodes);
     };
 
 };
