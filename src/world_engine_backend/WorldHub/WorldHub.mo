@@ -426,21 +426,50 @@ actor WorldHub {
     };
 
     // custom SNS functions for upgrading UserNodes which are under control of WorldHub canister
-    public shared ({ caller }) func validate_upgrade_usernodes(usernode_wasm_module : Blob) : async ({
+    private stable var usernode_wasm_module = {
+        version : Text = "";
+        wasm : Blob = Blob.fromArray([]);
+        last_updated : Int = 0;
+    };
+
+    public query func getUserNodeWasmVersion() : async (Text) {
+        return usernode_wasm_module.version;
+    };
+
+    public shared({caller}) func updateUserNodeWasmModule(arg : {
+        version : Text;
+        wasm : Blob;
+    }) : async (Int) {
+        assert(caller != Principal.fromText("2vxsx-fae"));
+        usernode_wasm_module := {
+            version = arg.version;
+            wasm = arg.wasm;
+            last_updated = Time.now();
+        };
+        return usernode_wasm_module.last_updated;
+    };
+
+    public shared ({ caller }) func validate_upgrade_usernodes(last_verified_update : Int) : async ({
         #Ok : Text;
         #Err : Text;
     }) {
+        assert(caller != Principal.fromText("2vxsx-fae"));
         // assert (caller == Principal.fromText(""));
-        return #Ok("passed");
+        if(usernode_wasm_module.last_updated == last_verified_update) {
+            return #Ok("last_verified_update passed");
+        } else {
+            return #Err("last_verified_update failed");
+        };
     };
 
-    public shared ({ caller }) func upgrade_usernodes(usernode_wasm_module : Blob) : async () {
+    public shared ({ caller }) func upgrade_usernodes() : async () {
+        assert(caller != Principal.fromText("2vxsx-fae"));
         // assert (caller == Principal.fromText(""));
         for (node in _nodes.vals()) {
             let IC : Management.Management = actor (ENV.IC_Management);
             await IC.install_code({
                 arg = [];
-                wasm_module = usernode_wasm_module;
+                wasm_module = usernode_wasm_module.wasm;
                 mode = #reinstall;
                 canister_id = Principal.fromText(node);
                 sender_canister_version = null;
