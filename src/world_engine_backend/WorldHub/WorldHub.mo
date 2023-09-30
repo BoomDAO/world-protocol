@@ -453,7 +453,6 @@ actor WorldHub {
         #Ok : Text;
         #Err : Text;
     }) {
-        assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         if(usernode_wasm_module.last_updated == last_verified_update) {
             return #Ok("last_verified_update passed");
         } else {
