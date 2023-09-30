@@ -453,8 +453,7 @@ actor WorldHub {
         #Ok : Text;
         #Err : Text;
     }) {
-        assert(caller != Principal.fromText("2vxsx-fae"));
-        // assert (caller == Principal.fromText(""));
+        assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         if(usernode_wasm_module.last_updated == last_verified_update) {
             return #Ok("last_verified_update passed");
         } else {
@@ -463,8 +462,7 @@ actor WorldHub {
     };
 
     public shared ({ caller }) func upgrade_usernodes() : async () {
-        assert(caller != Principal.fromText("2vxsx-fae"));
-        // assert (caller == Principal.fromText(""));
+        assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         for (node in _nodes.vals()) {
             let IC : Management.Management = actor (ENV.IC_Management);
             await IC.install_code({
