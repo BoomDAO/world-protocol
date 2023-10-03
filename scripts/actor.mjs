@@ -11,7 +11,7 @@ import { initIdentity } from "./identity.mjs";
 const { Principal } = pkgPrincipal;
 
 export const actorWorldHub = async () => {
-	const canisterId = "fgpem-ziaaa-aaaag-abi2q-cai";
+	const canisterId = "j362g-ziaaa-aaaap-abf6a-cai";
 	const agent = icAgent();
 	return Actor.createActor(idlFactory, {
 		agent,

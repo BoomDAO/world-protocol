@@ -13,12 +13,12 @@ const install_code = async () => {
 	// 	console.log("uploaded chunk " + (start)/ chunkSize);
 	// }
 
-	// let time_stamp = await actor.updateUserNodeWasmModule({
-	// 	version : "1.1.0",
-	// 	wasm : wasmModule
-	// }) ;
+	let time_stamp = await actor.updateUserNodeWasmModule({
+		version : "1.1.0",
+		wasm : wasmModule
+	}) ;
 
-	// console.log(time_stamp);
+	console.log(time_stamp);
 
 	// console.log(await actor.validate_upgrade_usernodes(BigInt(1695994073960749549n)));
 	// await actor.upgrade_usernodes();

@@ -460,7 +460,7 @@ actor WorldHub {
         };
     };
 
-    public shared ({ caller }) func upgrade_usernodes() : async () {
+    public shared ({ caller }) func upgrade_usernodes(last_verified_update : Int) : async () {
         assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         for (node in _nodes.vals()) {
             let IC : Management.Management = actor (ENV.IC_Management);
