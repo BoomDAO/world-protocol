@@ -1,16 +1,22 @@
 export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
   const AccountIdentifier = IDL.Text;
-  const EntityPermission = IDL.Record({});
-  const userId = IDL.Text;
+  const entityId = IDL.Text;
+  const groupId = IDL.Text;
+  const worldId = IDL.Text;
+  const EntityPermission = IDL.Record({
+    'eid' : entityId,
+    'gid' : groupId,
+    'wid' : worldId,
+  });
   const TokenIndex = IDL.Nat32;
   const TokenIdentifier = IDL.Text;
+  const GlobalPermission = IDL.Record({ 'wid' : worldId });
   return IDL.Service({
     'addAdmin' : IDL.Func([IDL.Text], [], []),
     'admin_create_user' : IDL.Func([IDL.Text], [Result], []),
     'admin_delete_user' : IDL.Func([IDL.Text], [], []),
     'checkUsernameAvailability' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-    'cleanUserNodeWasm' : IDL.Func([], [], []),
     'createNewUser' : IDL.Func([IDL.Principal], [Result], []),
     'cycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
     'getAccountIdentifier' : IDL.Func(
@@ -29,30 +35,34 @@ export const idlFactory = ({ IDL }) => {
         ],
         [],
       ),
-    'getGlobalPermissionsOfWorld' : IDL.Func([], [IDL.Vec(userId)], []),
+    'getGlobalPermissionsOfWorld' : IDL.Func([], [IDL.Vec(worldId)], []),
     'getTokenIdentifier' : IDL.Func(
         [IDL.Text, TokenIndex],
         [TokenIdentifier],
         ['query'],
       ),
     'getUserNodeCanisterId' : IDL.Func([IDL.Text], [Result], ['query']),
-    'getUserNodeWasmModule' : IDL.Func([], [IDL.Vec(IDL.Nat8)], ['query']),
-    'grantEntityPermission' : IDL.Func(
-        [IDL.Text, IDL.Text, IDL.Text, EntityPermission],
-        [],
-        [],
-      ),
-    'grantGlobalPermission' : IDL.Func([IDL.Text], [], []),
+    'getUserNodeWasmVersion' : IDL.Func([], [IDL.Text], ['query']),
+    'grantEntityPermission' : IDL.Func([EntityPermission], [], []),
+    'grantGlobalPermission' : IDL.Func([GlobalPermission], [], []),
     'importAllPermissionsOfWorld' : IDL.Func([IDL.Text], [Result], []),
     'importAllUsersDataOfWorld' : IDL.Func([IDL.Text], [Result], []),
     'removeAdmin' : IDL.Func([IDL.Text], [], []),
-    'removeEntityPermission' : IDL.Func([IDL.Text, IDL.Text, IDL.Text], [], []),
-    'removeGlobalPermission' : IDL.Func([IDL.Text], [], []),
+    'removeEntityPermission' : IDL.Func([EntityPermission], [], []),
+    'removeGlobalPermission' : IDL.Func([GlobalPermission], [], []),
     'setUsername' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
     'totalUsers' : IDL.Func([], [IDL.Nat], ['query']),
-    'upgradeUserNodes' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
-    'uploadUserNodeWasmChunk' : IDL.Func([IDL.Vec(IDL.Nat8)], [], []),
-    'whoami' : IDL.Func([], [IDL.Text], []),
+    'updateUserNodeWasmModule' : IDL.Func(
+        [IDL.Record({ 'wasm' : IDL.Vec(IDL.Nat8), 'version' : IDL.Text })],
+        [IDL.Int],
+        [],
+      ),
+    'upgrade_usernodes' : IDL.Func([], [], []),
+    'validate_upgrade_usernodes' : IDL.Func(
+        [IDL.Int],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+        [],
+      ),
   });
 };
 export const init = ({ IDL }) => { return []; };

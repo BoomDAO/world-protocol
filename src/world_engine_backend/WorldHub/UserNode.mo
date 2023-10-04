@@ -9,7 +9,6 @@ import Error "mo:base/Error";
 import Float "mo:base/Float";
 import HashMap "mo:base/HashMap";
 import Hash "mo:base/Hash";
-import Map "mo:base/HashMap";
 import Int "mo:base/Int";
 import Int16 "mo:base/Int16";
 import Int8 "mo:base/Int8";
@@ -28,6 +27,7 @@ import Text "mo:base/Text";
 import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
+import Map "../utils/Map";
 
 import JSON "../utils/Json";
 import Parser "../utils/Parser";
@@ -40,8 +40,9 @@ import RandomUtil "../utils/RandomUtil";
 
 actor class UserNode() {
   // stable memory
+  let { ihash; nhash; thash; phash; calcHash } = Map;
   private stable var _entities : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.groupId, Trie.Trie<TGlobal.entityId, EntityTypes.Entity>>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [groupId -> [entities]]]]
-  private stable var _actions : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.Action>>> = Trie.empty();
+  private stable var _actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.ActionState>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
@@ -185,8 +186,8 @@ actor class UserNode() {
     };
   };
 
-  private func getAction_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId) : (?ActionTypes.Action) {
-    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
+  private func getActionState_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId) : (?ActionTypes.ActionState) {
+    switch (Trie.find(_actionStates, Utils.keyT(uid), Text.equal)) {
       case (?w) {
         switch (Trie.find(w, Utils.keyT(wid), Text.equal)) {
           case (?a) {
@@ -210,9 +211,9 @@ actor class UserNode() {
     };
   };
 
-  private func validateActionConfig_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.Action, Text>) {
-    var action : ?ActionTypes.Action = getAction_(uid, wid, aid);
-    var new_action : ?ActionTypes.Action = action;
+  private func validateAction_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.ActionState, Text>) {
+    var action : ?ActionTypes.ActionState = getActionState_(uid, wid, aid);
+    var new_actionState : ?ActionTypes.ActionState = action;//TODO: WHY IS THIS NOT BEING USED
     var _intervalStartTs : Nat = 0;
     var _actionCount : Nat = 0;
     var _quantity = ?0.0;
@@ -249,70 +250,75 @@ actor class UserNode() {
 
         var entityConstraints = Option.get(constraints.entityConstraint, []);
         for (e in entityConstraints.vals()) {
-          let _greaterThan : Float = Option.get(e.greaterThanOrEqualQuantity, 0.0);
-          let _lessThan : Float = Option.get(e.lessThanQuantity, 0.0);
           var worldId = Option.get(e.wid, wid);
           switch (getEntity_(uid, worldId, e.gid, e.eid)) {
             case (?entity) {
-              let _quantity = Option.get(entity.quantity, 0.0);
-              let _expiration = Option.get(entity.expiration, 0);
-              let _attribute = Option.get(entity.attribute, "");
-              //quantity check
-              if (_greaterThan != 0.0 and _lessThan != 0.0) {
-                if (_quantity >= _lessThan or _quantity < _greaterThan) return #err("entity quantity is not in EntityContraints greaterThan and lessThan range");
-              } else if (_lessThan == 0.0) {
-                if (_quantity < _greaterThan) return #err("entity quantity does not pass greaterThan EntityContraints");
-              } else if (_greaterThan == 0.0) {
-                if (_quantity >= _lessThan) return #err("entity quantity does not pass lessThan EntityContraints");
-              };
+              // switch (Trie.find(entity.fields, Utils.keyT(e.fieldName), Text.equal))
+              switch (Map.get(entity.fields, thash, e.fieldName)) {
+                case (?current_val) {
+                  switch (e.validation) {
+                    case (#greaterThanNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
 
-              //expiration check
-              switch (e.notExpired) {
-                case (?bool) {
-                  if (bool) {
-                    if (_expiration < Time.now()) {
-                      return #err("entity expired as per EntityContraints expiration");
+                      if (current_val_in_float <= val) {
+                        return #err("entity field : " #e.fieldName # " is less than " #Float.toText(val) # ", does not pass EntityConstraints");
+                      };
                     };
-                  } else {
-                    if (_expiration >= Time.now()) {
-                      return #err("entity must be expired");
+                    case (#lessThanNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float >= val) {
+                        return #err("entity field : " #e.fieldName # " is greater than " #Float.toText(val) # ", does not pass EntityConstraints");
+                      };
+                    };
+                    case (#equalToNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float != val) {
+                        return #err("entity field : " #e.fieldName # " is not equal to " #Float.toText(val) # ", does not pass EntityConstraints");
+                      };
+                    };
+                    case (#equalToString val) {
+                      if (current_val != val) {
+                        return #err("entity field : " #e.fieldName # " is not equal to " #val # ", does not pass EntityConstraints");
+                      };
+                    };
+                    case (#greaterThanNowTimestamp) {
+                      let current_val_in_Nat = Utils.textToNat(current_val);
+                      if (current_val_in_Nat < Time.now()) {
+                        return #err("entity field : " #e.fieldName # " Time.Now is greater than current value, does not pass EntityConstraints, "#Nat.toText(current_val_in_Nat)#" < "#Int.toText(Time.now()));
+                      };
+                    };
+                    case (#lessThanNowTimestamp) {
+                      let current_val_in_Nat = Utils.textToNat(current_val);
+                      if (current_val_in_Nat > Time.now()) {
+                        return #err("entity field : " #e.fieldName # " Time.Now is lesser than current value, does not pass EntityConstraints, "#Nat.toText(current_val_in_Nat)#" > "#Int.toText(Time.now()));
+                      };
+                    };
+                    case (#greaterThanEqualToNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float < val) {
+                        return #err("entity field : " #e.fieldName # " is less than " #Float.toText(val) # ", does not pass EntityConstraints");
+                      };
+                    };
+                    case (#lessThanEqualToNumber val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+
+                      if (current_val_in_float > val) {
+                        return #err("entity field : " #e.fieldName # " is greater than " #Float.toText(val) # ", does not pass EntityConstraints");
+                      };
                     };
                   };
                 };
-                case _ {};
-              };
-
-              //attribute check
-              switch (e.equalToAttribute) {
-                case (?a) {
-                  if (_attribute != a) {
-                    return #err("entity does not pass EntityContraints equalToAttribute");
-                  };
+                case _ {
+                  return #err(("field with key : " #e.fieldName # " does not exist in respected entity to match entity constraints."));
                 };
-                case _ {};
               };
             };
             case _ {
               //If u dont have the entity
-
-              if (_greaterThan > 0) return #err("You don't have entity of id: " #e.eid # " that meets quantity requirement of: " # Float.toText(_greaterThan));
-
-              //expiration check
-              switch (e.notExpired) {
-                case (?bool) {
-                  return #err("You don't have entity of id: " #e.eid # ", therefore you dont meet requirement ");
-                };
-                case _ {};
-              };
-
-              //attribute check
-              switch (e.equalToAttribute) {
-                case (?a) {
-                  return #err("You don't have entity of id: " #e.eid # ", therefore you dont meet requirement ");
-                };
-                case _ {};
-              };
-
+              return #err("You don't have entity of id: " #e.eid # ", gid: "#e.gid#" to match EntityConstraints");
             };
           };
         };
@@ -320,7 +326,7 @@ actor class UserNode() {
       case _ {};
     };
 
-    let a : ActionTypes.Action = {
+    let a : ActionTypes.ActionState = {
       intervalStartTs = _intervalStartTs;
       actionCount = _actionCount;
       actionId = aid; //NEW
@@ -328,71 +334,42 @@ actor class UserNode() {
     return #ok(a);
   };
 
-  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<[EntityTypes.Entity], Text>) {
+  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     let wid = Principal.toText(caller);
-    // decrementQuantity check
+    //checks
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
-        case (#spendEntityQuantity sq) {
-          let entityWid = switch (sq.wid) {
+        case (#decrementNumber val) {
+          let entityWid = switch (val.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, sq.gid, sq.eid, wid) == false) {
+          if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
-          var _entity = getEntity_(uid, entityWid, sq.gid, sq.eid);
+          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
           switch (_entity) {
             case (?entity) {
-              var _quantity = 0.0;
-              var _expiration = 0;
-              _quantity := Option.get(entity.quantity, 0.0);
-              _expiration := Option.get(entity.expiration, 0);
-              if (Float.less(_quantity, sq.quantity)) {
-                return #err(sq.gid # " entityId cannot undergo spendQuantity");
+              // switch (Trie.find(entity.fields, Utils.keyT(val.field), Text.equal)) {
+              switch (Map.get(entity.fields, thash, val.field)) {
+                case (?current_val) { };
+                case _ {
+                  return #err(val.eid # " Entity does not contain field : " #val.field # ", can't decrementNumber from a non-existing entity field");
+                };
               };
             };
             case _ {
-              return #err("You dont have entities of id: " #sq.eid);
+              return #err(val.eid # " Entity does not exist, can't decrementNumber from a non-existing entity");
             };
           };
         };
-        case (#receiveEntityQuantity rq) {
-          let entityWid = switch (rq.wid) {
+        case (#incrementNumber val) {
+          let entityWid = switch (val.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, rq.gid, rq.eid, wid) == false) {
+          if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
-          };
-        };
-        case (#renewEntityExpiration re) {
-          let entityWid = switch (re.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          if (isPermitted_(entityWid, re.gid, re.eid, wid) == false) {
-            return #err("caller not authorized to processActionEntities");
-          };
-        };
-        case (#reduceEntityExpiration re) {
-          let entityWid = switch (re.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          if (isPermitted_(entityWid, re.gid, re.eid, wid) == false) {
-            return #err("caller not authorized to processActionEntities");
-          };
-          var _entity = getEntity_(uid, entityWid, re.gid, re.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _expiration = 0;
-              _expiration := Option.get(entity.expiration, 0);
-              if (Nat.less(_expiration, re.duration)) {
-                return #err(re.gid # " entityId cannot undergo reduceExpiration");
-              };
-            };
-            case _ {};
           };
         };
         case (#deleteEntity de) {
@@ -404,12 +381,20 @@ actor class UserNode() {
             return #err("caller not authorized to processActionEntities");
           };
         };
-        case (#setEntityAttribute sa) {};
+        case (#renewTimestamp val) {
+          let entityWid = switch (val.wid) {
+            case (?value) { value };
+            case (_) { wid };
+          };
+          if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
+            return #err("caller not authorized to processActionEntities");
+          };
+        };
         case _ {};
       };
     };
 
-    var b = Buffer.Buffer<EntityTypes.Entity>(0);
+    var b = Buffer.Buffer<EntityTypes.StableEntity>(0);
 
     var response : ActionTypes.ActionResponse = (
       {
@@ -421,10 +406,10 @@ actor class UserNode() {
       [],
       [],
     );
-    let isActionConfigValid = await validateActionConfig_(uid, wid, aid, actionConstraint);
-    switch (isActionConfigValid) {
+    let isActionValid = await validateAction_(uid, wid, aid, actionConstraint);
+    switch (isActionValid) {
       case (#ok a) {
-        _actions := Trie.put3D(_actions, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
+        _actionStates := Trie.put3D(_actionStates, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
         response := (a, [], [], []);
       };
       case (#err a) {
@@ -435,141 +420,240 @@ actor class UserNode() {
     // updating entities
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
-        case (#receiveEntityQuantity rq) {
-          let entityWid = switch (rq.wid) {
+        //NEW
+        case (#setNumber val) {
+          let entityWid = switch (val.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, rq.gid, rq.eid);
+          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
           switch (_entity) {
             case (?entity) {
-              var _quantity = 0.0;
-              var _expiration = 0;
-              _quantity := Option.get(entity.quantity, 0.0);
-              _expiration := Option.get(entity.expiration, 0);
+              var _fields = entity.fields;
+              // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(val.value)).0;
+              ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
               var new_entity : EntityTypes.Entity = {
                 eid = entity.eid;
                 gid = entity.gid;
                 wid = entity.wid;
-                attribute = entity.attribute;
-                quantity = ?(_quantity + rq.quantity);
-                expiration = ?_expiration; //Here we will update code for expiration TODO:
+                fields = _fields;
               };
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add(new_entity);
+              b.add({
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = Map.toArray(_fields);
+              });
             };
             case _ {
+              var _fields = Map.new<Text, Text>();
+              // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(val.value)).0;
+              ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
               var new_entity : EntityTypes.Entity = {
-                eid = rq.eid;
+                eid = val.eid;
+                gid = val.gid;
                 wid = entityWid;
-                gid = rq.gid;
-                quantity = ?(rq.quantity);
-                expiration = null; //Here we will update code for expiration TODO:
-                attribute = null;
+                fields = _fields;
               };
-              _entities := entityPut4D_(_entities, uid, entityWid, rq.gid, rq.eid, new_entity);
-              b.add(new_entity);
+              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
+              b.add({
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = Map.toArray(_fields);
+              });
             };
           };
         };
-        case (#spendEntityQuantity dq) {
-          let entityWid = switch (dq.wid) {
+        // // //
+        case (#decrementNumber val) {
+          let entityWid = switch (val.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, dq.gid, dq.eid);
+          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
           switch (_entity) {
             case (?entity) {
-              var _quantity = 0.0;
-              var _expiration = 0;
-              _quantity := Option.get(entity.quantity, 0.0);
-              _expiration := Option.get(entity.expiration, 0);
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                wid = entity.wid;
-                gid = entity.gid;
-                quantity = ?(_quantity - dq.quantity);
-                expiration = ?_expiration; //Here we will update code for expiration TODO:
-                attribute = entity.attribute;
-              };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add(new_entity);
-            };
-            case _ {};
-          };
-        };
-        case (#renewEntityExpiration re) {
-          let entityWid = switch (re.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, re.gid, re.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _expiration = 0;
-              var _quantity = 0.0;
-              _quantity := Option.get(entity.quantity, 0.0);
-              _expiration := Option.get(entity.expiration, 0);
-              var new_expiration = 0;
-              let t : Text = Int.toText(Time.now());
-              let time : Nat = Utils.textToNat(t);
-              if (_expiration < time) {
-                new_expiration := time + re.duration;
-              } else {
-                new_expiration := _expiration + re.duration;
+              var _fields = entity.fields;
+              switch (Map.get(entity.fields, thash, val.field)) {
+                case (?current_val) {
+                  let current_val_in_float = Utils.textToFloat(current_val);
+                  ignore Map.put(_fields, thash, val.field, Float.toText(Float.sub(current_val_in_float, val.value)));
+                };
+                case _ {
+                  return #err(val.eid # " Entity does not contain field : " #val.field # ", can't decrementNumber from a non-existing entity field");
+                };
               };
               var new_entity : EntityTypes.Entity = {
                 eid = entity.eid;
-                wid = entity.wid;
                 gid = entity.gid;
-                quantity = ?_quantity;
-                expiration = ?new_expiration;
-                attribute = entity.attribute;
+                wid = entity.wid;
+                fields = _fields;
               };
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add(new_entity);
+              b.add({
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = Map.toArray(_fields);
+              });
             };
             case _ {
-
-              let t : Text = Int.toText(Time.now());
-              let time : Nat = Utils.textToNat(t);
-              var new_expiration = time + re.duration;
-
-              var new_entity : EntityTypes.Entity = {
-                eid = re.eid;
-                wid = entityWid;
-                gid = re.gid;
-                quantity = null;
-                expiration = ?new_expiration;
-                attribute = null;
-              };
-              _entities := entityPut4D_(_entities, uid, entityWid, re.gid, re.eid, new_entity);
-              b.add(new_entity);
+              return #err(val.eid # " Entity does not exist, can't decrementNumber from a non-existing entity");
             };
           };
         };
-        case (#reduceEntityExpiration re) {
-          let entityWid = switch (re.wid) {
+        case (#incrementNumber val) {
+          let entityWid = switch (val.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          var _entity = getEntity_(uid, entityWid, re.gid, re.eid);
+          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
           switch (_entity) {
             case (?entity) {
-              var _expiration = 0;
-              _expiration := Option.get(entity.expiration, 0);
+              var _fields = entity.fields;
+              switch (Map.get(entity.fields, thash, val.field)) {
+                case (?current_val) {
+                  let current_val_in_float = Utils.textToFloat(current_val);
+                  ignore Map.put(_fields, thash, val.field, Float.toText(Float.add(current_val_in_float, val.value)));
+                };
+                case _ {
+                  ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
+                };
+              };
               var new_entity : EntityTypes.Entity = {
                 eid = entity.eid;
-                wid = entity.wid;
                 gid = entity.gid;
-                quantity = entity.quantity;
-                expiration = ?(_expiration - re.duration);
-                attribute = entity.attribute;
+                wid = entity.wid;
+                fields = _fields;
               };
               _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add(new_entity);
+              b.add({
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = Map.toArray(_fields);
+              });
             };
-            case _ {};
+            case _ {
+              //NEW
+              var _fields = Map.new<Text, Text>();
+              ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
+              var new_entity : EntityTypes.Entity = {
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = _fields;
+              };
+              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
+              b.add({
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = Map.toArray(_fields);
+              });
+            };
+          };
+        };
+        case (#setString val) {
+          let entityWid = switch (val.wid) {
+            case (?value) { value };
+            case (_) { wid };
+          };
+          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
+          switch (_entity) {
+            case (?entity) {
+              var _fields = entity.fields;
+              ignore Map.put(_fields, thash, val.field, val.value);
+              var new_entity : EntityTypes.Entity = {
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = _fields;
+              };
+              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+              b.add({
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = Map.toArray(_fields);
+              });
+            };
+            case _ {
+              var _fields = Map.new<Text, Text>();
+              ignore Map.put(_fields, thash, val.field, val.value);
+              var new_entity : EntityTypes.Entity = {
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = _fields;
+              };
+              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
+              b.add({
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = Map.toArray(_fields);
+              });
+            };
+          };
+        };
+        case (#renewTimestamp val) {
+          let entityWid = switch (val.wid) {
+            case (?value) { value };
+            case (_) { wid };
+          };
+          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
+          switch (_entity) {
+            case (?entity) {
+              var _fields = entity.fields;
+
+              switch(Map.get(_fields, thash, val.field)){
+                case (?current_val) {
+                  let current_val_in_nat = Utils.textToNat(current_val);
+
+                  if(current_val_in_nat > Time.now()) {
+                    ignore Map.put(_fields, thash, val.field, Nat.toText(current_val_in_nat + val.value));
+                  }
+                  else ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
+                };
+                case _ {
+                  ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
+                };
+              };
+
+              var new_entity : EntityTypes.Entity = {
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = _fields;
+              };
+              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+              b.add({
+                eid = entity.eid;
+                gid = entity.gid;
+                wid = entity.wid;
+                fields = Map.toArray(_fields);
+              });
+            };
+            case _ {
+              var _fields = Map.new<Text, Text>();
+              ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
+              var new_entity : EntityTypes.Entity = {
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = _fields;
+              };
+              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
+              b.add({
+                eid = val.eid;
+                gid = val.gid;
+                wid = entityWid;
+                fields = Map.toArray(_fields);
+              });
+            };
           };
         };
         case (#deleteEntity de) {
@@ -579,47 +663,13 @@ actor class UserNode() {
           };
           _entities := entityRemove4D_(_entities, uid, entityWid, de.gid, de.eid);
         };
-        case (#setEntityAttribute sa) {
-          let entityWid = switch (sa.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, sa.gid, sa.eid);
-          switch (_entity) {
-            case (?entity) {
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                wid = entity.wid;
-                gid = entity.gid;
-                quantity = entity.quantity;
-                expiration = entity.expiration;
-                attribute = ?sa.attribute;
-              };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add(new_entity);
-            };
-            case _ {
-
-              var new_entity : EntityTypes.Entity = {
-                eid = sa.eid;
-                wid = entityWid;
-                gid = sa.gid;
-                quantity = null;
-                expiration = null;
-                attribute = ?sa.attribute;
-              };
-              _entities := entityPut4D_(_entities, uid, entityWid, sa.gid, sa.eid, new_entity);
-              b.add(new_entity);
-            };
-          };
-        };
         case _ {};
       };
     };
     return #ok(Buffer.toArray(b));
   };
 
-  public shared ({ caller }) func manuallyOverwriteEntities(uid : TGlobal.userId, gid : TGlobal.groupId, entities : [EntityTypes.Entity]) : async (Result.Result<[EntityTypes.Entity], Text>) {
+  public shared ({ caller }) func manuallyOverwriteEntities(uid : TGlobal.userId, gid : TGlobal.groupId, entities : [EntityTypes.StableEntity]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     let wid = Principal.toText(caller);
     for (entity in entities.vals()) {
       if (isPermitted_(entity.wid, entity.gid, entity.eid, wid) == false) {
@@ -627,7 +677,13 @@ actor class UserNode() {
       };
     };
     for (entity in entities.vals()) {
-      _entities := entityPut4D_(_entities, uid, wid, gid, entity.eid, entity);
+      var new_entity : EntityTypes.Entity = {
+        eid = entity.eid;
+        gid = entity.gid;
+        wid = entity.wid;
+        fields = Map.fromIter(entity.fields.vals(), thash);
+      };
+      _entities := entityPut4D_(_entities, uid, wid, gid, entity.eid, new_entity);
     };
     return #ok(entities);
   };
@@ -643,9 +699,9 @@ actor class UserNode() {
     Cycles.balance();
   };
 
-  public query func getAllUserWorldActions(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.Action], Text>) {
-    var b = Buffer.Buffer<ActionTypes.Action>(0);
-    switch (Trie.find(_actions, Utils.keyT(uid), Text.equal)) {
+  public query func getAllUserActionStates(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.ActionState], Text>) {
+    var b = Buffer.Buffer<ActionTypes.ActionState>(0);
+    switch (Trie.find(_actionStates, Utils.keyT(uid), Text.equal)) {
       case (?g) {
         switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?g) {
@@ -663,15 +719,20 @@ actor class UserNode() {
     return #ok(Buffer.toArray(b));
   };
 
-  public query func getAllUserWorldEntities(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[EntityTypes.Entity], Text>) {
-    var b = Buffer.Buffer<EntityTypes.Entity>(0);
+  public query func getAllUserEntities(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var b = Buffer.Buffer<EntityTypes.StableEntity>(0);
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
       case (?g) {
         switch (Trie.find(g, Utils.keyT(wid), Text.equal)) {
           case (?g) {
             for ((gid, entityTrie) in Trie.iter(g)) {
               for ((eid, entity) in Trie.iter(entityTrie)) {
-                b.add(entity);
+                b.add({
+                  eid = entity.eid;
+                  gid = entity.gid;
+                  wid = entity.wid;
+                  fields = Map.toArray(entity.fields);
+                });
               };
             };
           };
@@ -685,11 +746,16 @@ actor class UserNode() {
     return #ok(Buffer.toArray(b));
   };
 
-  public query func getSpecificUserWorldEntities(uid : TGlobal.userId, wid : TGlobal.worldId, eids : [(TGlobal.groupId, TGlobal.entityId)]) : async (Result.Result<[EntityTypes.Entity], Text>) {
-    var b = Buffer.Buffer<EntityTypes.Entity>(0);
+  public query func getSpecificUserEntities(uid : TGlobal.userId, wid : TGlobal.worldId, eids : [(TGlobal.groupId, TGlobal.entityId)]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var b = Buffer.Buffer<EntityTypes.StableEntity>(0);
     for ((gid, eid) in eids.vals()) {
       switch (getEntity_(uid, wid, gid, eid)) {
-        case (?e) b.add(e);
+        case (?e) b.add({
+          eid = e.eid;
+          gid = e.gid;
+          wid = e.wid;
+          fields = Map.toArray(e.fields);
+        });
         case _ {
           return #err(eid # " entity not found");
         };
@@ -792,12 +858,12 @@ actor class UserNode() {
       };
     };
 
-    for ((userId, user_data) in Trie.iter(_actions)) {
+    for ((userId, user_data) in Trie.iter(_actionStates)) {
       switch (Trie.find(user_data, Utils.keyT(ofWorldId), Text.equal)) {
         case (?user_world_data) {
           var new_user_data = user_data;
           new_user_data := Trie.put(new_user_data, Utils.keyT(toWorldId), Text.equal, user_world_data).0;
-          _actions := Trie.put(_actions, Utils.keyT(userId), Text.equal, new_user_data).0;
+          _actionStates := Trie.put(_actionStates, Utils.keyT(userId), Text.equal, new_user_data).0;
         };
         case _ {};
       };

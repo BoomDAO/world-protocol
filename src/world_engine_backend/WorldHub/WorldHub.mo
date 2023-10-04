@@ -53,17 +53,6 @@ actor WorldHub {
     private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
     private func WorldHubCanisterId() : Principal = Principal.fromActor(WorldHub);
 
-    private var userNodeWasmModule : Buffer.Buffer<Nat8> = Buffer.Buffer<Nat8>(0);
-    private stable var stableUserNodeWasmModule : [Nat8] = [];
-
-    system func preupgrade() {
-        stableUserNodeWasmModule := Buffer.toArray(userNodeWasmModule);
-    };
-    system func postupgrade() {
-        userNodeWasmModule := Buffer.fromArray(stableUserNodeWasmModule);
-        stableUserNodeWasmModule := [];
-    };
-
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
         var count : Nat32 = 0;
@@ -209,7 +198,7 @@ actor WorldHub {
                 var canister_id : Text = "";
                 label _check for (can_id in _nodes.vals()) {
                     var size : Nat32 = countUsers_(can_id);
-                    if (size < 1000) {
+                    if (size < 20) {
                         canister_id := can_id;
                         _uids := Trie.put(_uids, Utils.keyT(_uid), Text.equal, canister_id).0;
                         break _check;
@@ -436,37 +425,53 @@ actor WorldHub {
         Buffer.toArray(b);
     };
 
-    public shared ({ caller }) func cleanUserNodeWasm() : async () {
-        assert (isAdmin_(caller));
-        userNodeWasmModule := Buffer.fromArray([]);
+    // custom SNS functions for upgrading UserNodes which are under control of WorldHub canister
+    private stable var usernode_wasm_module = {
+        version : Text = "";
+        wasm : Blob = Blob.fromArray([]);
+        last_updated : Int = 0;
     };
 
-    public shared ({ caller }) func uploadUserNodeWasmChunk(chunk : [Nat8]) : async () {
-        assert (isAdmin_(caller));
-        for (i in chunk.vals()) {
-            userNodeWasmModule.add(i);
+    public query func getUserNodeWasmVersion() : async (Text) {
+        return usernode_wasm_module.version;
+    };
+
+    public shared({caller}) func updateUserNodeWasmModule(arg : {
+        version : Text;
+        wasm : Blob;
+    }) : async (Int) {
+        assert(caller != Principal.fromText("2vxsx-fae"));
+        usernode_wasm_module := {
+            version = arg.version;
+            wasm = arg.wasm;
+            last_updated = Time.now();
+        };
+        return usernode_wasm_module.last_updated;
+    };
+
+    public shared ({ caller }) func validate_upgrade_usernodes(last_verified_update : Int) : async ({
+        #Ok : Text;
+        #Err : Text;
+    }) {
+        if(usernode_wasm_module.last_updated == last_verified_update) {
+            return #Ok("last_verified_update passed");
+        } else {
+            return #Err("last_verified_update failed");
         };
     };
 
-    public query func getUserNodeWasmModule() : async [Nat8] {
-        return Buffer.toArray(userNodeWasmModule);
-    };
-
-    public shared ({ caller }) func upgradeUserNodes() : async ([Text]) {
-        assert (isAdmin_(caller));
-        var updated_user_nodes = Buffer.Buffer<Text>(0);
+    public shared ({ caller }) func upgrade_usernodes(last_verified_update : Int) : async () {
+        assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         for (node in _nodes.vals()) {
             let IC : Management.Management = actor (ENV.IC_Management);
             await IC.install_code({
                 arg = [];
-                wasm_module = Blob.fromArray(Buffer.toArray(userNodeWasmModule));
-                mode = #upgrade;
+                wasm_module = usernode_wasm_module.wasm;
+                mode = #reinstall;
                 canister_id = Principal.fromText(node);
                 sender_canister_version = null;
             });
-            updated_user_nodes.add(node);
         };
-        return Buffer.toArray(updated_user_nodes);
     };
 
 };
