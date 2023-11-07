@@ -13,9 +13,8 @@ const install_code = async () => {
 	// 	console.log("uploaded chunk " + (start)/ chunkSize);
 	// }
 
-	let time_stamp = await actor.updateUserNodeWasmModule({
-		version : "1.1.0",
-		wasm : wasmModule
+	let time_stamp = await actor.uploadNewWasmModule({
+		wasmModule : wasmModule
 	}) ;
 
 	console.log(time_stamp);

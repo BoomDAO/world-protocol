@@ -213,7 +213,7 @@ actor StakingHub {
     if (tokenCanisterId == ENV.ckBTCCanisterId) {
       t := await ICRC1_Ledger.get_transactions(_req);
     } else {
-      t := await ICRC1_Ledger.icrc3_get_transactions(_req);
+      t := await ICRC1_Ledger.get_transactions(_req);
     };
 
     if ((t.transactions).size() == 0) {

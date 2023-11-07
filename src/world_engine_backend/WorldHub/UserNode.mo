@@ -12,6 +12,7 @@ import Hash "mo:base/Hash";
 import Int "mo:base/Int";
 import Int16 "mo:base/Int16";
 import Int8 "mo:base/Int8";
+import Int64 "mo:base/Int64";
 import Iter "mo:base/Iter";
 import L "mo:base/List";
 import Nat "mo:base/Nat";
@@ -36,7 +37,12 @@ import EntityTypes "../types/entity.types";
 import TGlobal "../types/global.types";
 import Utils "../utils/Utils";
 import ENV "../utils/Env";
-import RandomUtil "../utils/RandomUtil";
+import ICP "../types/icp.types";
+import ICRC1 "../types/icrc.types";
+import EXT "../types/ext.types";
+import Ledger "../modules/Ledgers";
+import AccountIdentifier "../utils/AccountIdentifier";
+import Hex "../utils/Hex";
 
 actor class UserNode() {
   // stable memory
@@ -45,6 +51,10 @@ actor class UserNode() {
   private stable var _actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.ActionState>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + GroupId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
+  private stable var _icp_blocks : Trie.Trie<Text, Text> = Trie.empty(); // Block_index -> ""
+  private stable var _icrc_blocks : Trie.Trie<Text, Trie.Trie<Text, Text>> = Trie.empty(); // token_canister_id -> [Block_index -> ""]
+  private stable var _icrc_token_decimals : Trie.Trie<Text, Nat8> = Trie.empty(); //token_canister_id -> decimals
+  private stable var _nft_txs : Trie.Trie<Text, Trie.Trie<Text, EXT.TokenIndex>> = Trie.empty(); // nft_canister_id -> [TxId, TokenIndex]
 
   // Internal functions
   //
@@ -211,9 +221,196 @@ actor class UserNode() {
     };
   };
 
-  private func validateAction_(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.ActionState, Text>) {
+  private func getTokenDecimal(token_canister_id : Text) : Nat8 {
+    switch (Trie.find(_icrc_token_decimals, Utils.keyT(token_canister_id), Text.equal)) {
+      case (?d) {
+        return d;
+      };
+      case _ {
+        return 0;
+      };
+    };
+  };
+
+  private func validateICPTransfer_(fromAccountId : Text, toAccountId : Text, amt : ICP.Tokens, base_block : ICP.Block, block_index : ICP.BlockIndex) : Result.Result<Text, Text> {
+    switch (Trie.find(_icp_blocks, Utils.keyT(Nat64.toText(block_index)), Text.equal)) {
+      case (?_) {
+        return #err("block already verified before");
+      };
+      case _ {};
+    };
+    var tx : ICP.Transaction = base_block.transaction;
+    var op : ?ICP.Operation = tx.operation;
+    switch (op) {
+      case (?op) {
+        switch (op) {
+          case (#Transfer { to; fee; from; amount }) {
+            if (Hex.encode(Blob.toArray(Blob.fromArray(to))) == toAccountId and Hex.encode(Blob.toArray(Blob.fromArray(from))) == fromAccountId and amount == amt) {
+              _icp_blocks := Trie.put(_icp_blocks, Utils.keyT(Nat64.toText(block_index)), Text.equal, "").0;
+              return #ok("verified!");
+            } else {
+              return #err("invalid tx!");
+            };
+          };
+          case (#Burn {}) {
+            return #err("burn tx!");
+          };
+          case (#Mint {}) {
+            return #err("mint tx!");
+          };
+        };
+      };
+      case _ {
+        return #err("invalid tx!");
+      };
+    };
+  };
+
+  private func validateICRCTransfer_(token_canister_id : Text, fromAccount : ICRC1.Account, toAccount : ICRC1.Account, amt : Nat, tx : ICRC1.Transaction, block_index : Nat) : Result.Result<Text, Text> {
+    switch (Trie.find(_icrc_blocks, Utils.keyT(token_canister_id), Text.equal)) {
+      case (?token_blocks) {
+        switch (Trie.find(token_blocks, Utils.keyT(Nat.toText(block_index)), Text.equal)) {
+          case (?_) {
+            return #err("block already verified before");
+          };
+          case _ {};
+        };
+      };
+      case _ {};
+    };
+    if (tx.kind == "transfer") {
+      let transfer = tx.transfer;
+      switch (transfer) {
+        case (?tt) {
+          if (tt.from == fromAccount and tt.to == toAccount and tt.amount == amt) {
+            _icrc_blocks := Trie.put2D(_icrc_blocks, Utils.keyT(token_canister_id), Text.equal, Utils.keyT(Nat.toText(block_index)), Text.equal, "");
+            return #ok("verified!");
+          } else {
+            return #err("tx transfer details mismatch!");
+          };
+        };
+        case (null) {
+          return #err("tx transfer details not found!");
+        };
+      };
+
+    } else if (tx.kind == "mint") {
+      let mint = tx.mint;
+      switch (mint) {
+        case (?tt) {
+          if (tt.to == toAccount and tt.amount == amt and fromAccount == { owner = Principal.fromText("2vxsx-fae"); subaccount = null }) {
+            return #ok("verified!");
+          } else {
+            return #err("tx mint details mismatch!");
+          };
+        };
+        case (null) {
+          return #err("tx mint details not found!");
+        };
+      };
+    } else {
+      return #err("not a transfer!");
+    };
+  };
+
+  private func validateNftTransfer_(nft_canister_id : Text, txs : [EXT.TxInfo], fromPrincipal : Text, txType : { #hold : { #boomEXT; #originalEXT }; #transfer : ActionTypes.NftTransfer }, metadata : ?Text) : Result.Result<Text, Text> {
+    switch (txType) {
+      case (#hold h) {
+        switch (h) {
+          case (#originalEXT) { return #ok("") }; // this case will be validated directly
+          case (#boomEXT) {
+            for (i in txs.vals()) {
+              switch (metadata) {
+                case (?_) {
+                  if (i.current_holder == AccountIdentifier.fromText(fromPrincipal, null) and metadata == i.metadata) {
+                    switch (Trie.find(_nft_txs, Utils.keyT(nft_canister_id), Text.equal)) {
+                      case (?val) {
+                        switch (Trie.find(val, Utils.keyT(i.txid), Text.equal)) {
+                          case (?_) {};
+                          case _ {
+                            _nft_txs := Trie.put2D(_nft_txs, Utils.keyT(nft_canister_id), Text.equal, Utils.keyT(i.txid), Text.equal, i.index);
+                            return #ok("");
+                          };
+                        };
+                      };
+                      case _ {
+                        _nft_txs := Trie.put2D(_nft_txs, Utils.keyT(nft_canister_id), Text.equal, Utils.keyT(i.txid), Text.equal, i.index);
+                        return #ok("");
+                      };
+                    };
+                  };
+                };
+                case _ {
+                  if (i.current_holder == AccountIdentifier.fromText(fromPrincipal, null)) {
+                    switch (Trie.find(_nft_txs, Utils.keyT(nft_canister_id), Text.equal)) {
+                      case (?val) {
+                        switch (Trie.find(val, Utils.keyT(i.txid), Text.equal)) {
+                          case (?_) {};
+                          case _ {
+                            _nft_txs := Trie.put2D(_nft_txs, Utils.keyT(nft_canister_id), Text.equal, Utils.keyT(i.txid), Text.equal, i.index);
+                            return #ok("");
+                          };
+                        };
+                      };
+                      case _ {
+                        _nft_txs := Trie.put2D(_nft_txs, Utils.keyT(nft_canister_id), Text.equal, Utils.keyT(i.txid), Text.equal, i.index);
+                        return #ok("");
+                      };
+                    };
+                  };
+                };
+              };
+            };
+            return #err("");
+          };
+        };
+      };
+      case (#transfer t) {
+        var toPrincipal = "";
+        if (t.toPrincipal == "") {
+          toPrincipal := "0000000000000000000000000000000000000000000000000000000000000001";
+        }
+        //NEW
+        else{
+          toPrincipal := t.toPrincipal;
+        };
+
+        label txs_check for (i in txs.vals()) {
+          
+          if (i.previous_holder == AccountIdentifier.fromText(fromPrincipal, null) and i.current_holder == AccountIdentifier.fromText(toPrincipal, null)) {
+
+            switch (metadata) {
+              case (?_) {
+                if(metadata != i.metadata) continue txs_check;
+              };
+              case (_){};
+            };
+
+            switch (Trie.find(_nft_txs, Utils.keyT(nft_canister_id), Text.equal)) {
+              case (?val) {
+                switch (Trie.find(val, Utils.keyT(i.txid), Text.equal)) {
+                  case (?_) {};
+                  case _ {
+                    _nft_txs := Trie.put2D(_nft_txs, Utils.keyT(nft_canister_id), Text.equal, Utils.keyT(i.txid), Text.equal, i.index);
+                    return #ok("");
+                  };
+                };
+              };
+              case _ {
+                _nft_txs := Trie.put2D(_nft_txs, Utils.keyT(nft_canister_id), Text.equal, Utils.keyT(i.txid), Text.equal, i.index);
+                return #ok("");
+              };
+            };
+          };
+        };
+        return #err("");
+      };
+    };
+  };
+
+  public shared ({ caller }) func validateConstraints(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint) : async (Result.Result<ActionTypes.ActionState, Text>) {
     var action : ?ActionTypes.ActionState = getActionState_(uid, wid, aid);
-    var new_actionState : ?ActionTypes.ActionState = action;//TODO: WHY IS THIS NOT BEING USED
+    var new_actionState : ?ActionTypes.ActionState = action; //TODO: WHY IS THIS NOT BEING USED
     var _intervalStartTs : Nat = 0;
     var _actionCount : Nat = 0;
     var _quantity = ?0.0;
@@ -248,12 +445,11 @@ actor class UserNode() {
           case _ {};
         };
 
-        var entityConstraints = Option.get(constraints.entityConstraint, []);
+        var entityConstraints = constraints.entityConstraint;
         for (e in entityConstraints.vals()) {
           var worldId = Option.get(e.wid, wid);
           switch (getEntity_(uid, worldId, e.gid, e.eid)) {
             case (?entity) {
-              // switch (Trie.find(entity.fields, Utils.keyT(e.fieldName), Text.equal))
               switch (Map.get(entity.fields, thash, e.fieldName)) {
                 case (?current_val) {
                   switch (e.validation) {
@@ -278,21 +474,26 @@ actor class UserNode() {
                         return #err("entity field : " #e.fieldName # " is not equal to " #Float.toText(val) # ", does not pass EntityConstraints");
                       };
                     };
-                    case (#equalToString val) {
+                    case (#equalToText val) {
                       if (current_val != val) {
+                        return #err("entity field : " #e.fieldName # " is not equal to " #val # ", does not pass EntityConstraints");
+                      };
+                    };
+                    case (#containsText val) {
+                      if (Text.contains(current_val, #text val)) {
                         return #err("entity field : " #e.fieldName # " is not equal to " #val # ", does not pass EntityConstraints");
                       };
                     };
                     case (#greaterThanNowTimestamp) {
                       let current_val_in_Nat = Utils.textToNat(current_val);
                       if (current_val_in_Nat < Time.now()) {
-                        return #err("entity field : " #e.fieldName # " Time.Now is greater than current value, does not pass EntityConstraints, "#Nat.toText(current_val_in_Nat)#" < "#Int.toText(Time.now()));
+                        return #err("entity field : " #e.fieldName # " Time.Now is greater than current value, does not pass EntityConstraints, " #Nat.toText(current_val_in_Nat) # " < " #Int.toText(Time.now()));
                       };
                     };
                     case (#lessThanNowTimestamp) {
                       let current_val_in_Nat = Utils.textToNat(current_val);
                       if (current_val_in_Nat > Time.now()) {
-                        return #err("entity field : " #e.fieldName # " Time.Now is lesser than current value, does not pass EntityConstraints, "#Nat.toText(current_val_in_Nat)#" > "#Int.toText(Time.now()));
+                        return #err("entity field : " #e.fieldName # " Time.Now is lesser than current value, does not pass EntityConstraints, " #Nat.toText(current_val_in_Nat) # " > " #Int.toText(Time.now()));
                       };
                     };
                     case (#greaterThanEqualToNumber val) {
@@ -318,7 +519,161 @@ actor class UserNode() {
             };
             case _ {
               //If u dont have the entity
-              return #err("You don't have entity of id: " #e.eid # ", gid: "#e.gid#" to match EntityConstraints");
+              return #err("You don't have entity of id: " #e.eid # ", gid: " #e.gid # " to match EntityConstraints");
+            };
+          };
+        };
+
+        // Validating ICP txs
+        let icpTxOptional = constraints.icpConstraint;
+        switch icpTxOptional {
+          case (?icpTx) {
+            let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
+            var res_icp : ICP.QueryBlocksResponse = await ICP_Ledger.query_blocks({
+              start = 1;
+              length = 1;
+            });
+            let chain_length = res_icp.chain_length;
+            let first_block_index = res_icp.first_block_index;
+            res_icp := await ICP_Ledger.query_blocks({
+              start = first_block_index;
+              length = chain_length - first_block_index;
+            });
+            let blocks = res_icp.blocks;
+            let total_blocks = blocks.size();
+
+            var fromAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(uid, null);
+            var toAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(icpTx.toPrincipal, null);
+            var amt : Nat64 = Int64.toNat64(Float.toInt64(icpTx.amount * 100000000.0));
+            var isValid : Bool = false;
+
+            if(total_blocks > 0){
+              label check_icp_blocks for (i in Iter.range(0, total_blocks - 1)) {
+                switch (validateICPTransfer_(fromAccountId, toAccountId, { e8s = amt }, blocks[i], (Nat64.fromNat(i) + first_block_index))) {
+                  case (#ok _) {
+                    isValid := true;
+                    break check_icp_blocks;
+                  };
+                  case (#err e) {};
+                };
+              };
+            };
+
+            if (isValid == false) {
+              return #err("ICP tx is not valid or too old");
+            };
+
+          };
+          case _ {};
+        };
+
+        //Validating ICRC token txs
+        let icrcTxs = constraints.icrcConstraint;
+        if (icrcTxs.size() != 0) {
+          var from_ : ICRC1.Account = {
+            owner = Principal.fromText(uid);
+            subaccount = null;
+          };
+          for (tx in icrcTxs.vals()) {
+            var to_ : ICRC1.Account = {
+              owner = Principal.fromText(tx.toPrincipal);
+              subaccount = null;
+            };
+            let ICRC_Ledger : Ledger.ICRC1 = actor (tx.canister);
+            var res_icrc : ICRC1.GetTransactionsResponse = await ICRC_Ledger.get_transactions({
+              start = 0;
+              length = 2000;
+            });
+
+            res_icrc := await ICRC_Ledger.get_transactions({
+              start = res_icrc.first_index;
+              length = res_icrc.log_length - res_icrc.first_index;
+            });
+            
+            let txs_icrc = res_icrc.transactions;
+            let total_txs_icrc = txs_icrc.size();
+
+            var decimal = getTokenDecimal(tx.canister);
+            if (decimal == 0) {
+              let d = await ICRC_Ledger.icrc1_decimals();
+              _icrc_token_decimals := Trie.put(_icrc_token_decimals, Utils.keyT(tx.canister), Text.equal, d).0;
+              decimal := d;
+            };
+            var amt : Nat64 = Int64.toNat64(Float.toInt64(tx.amount * (Float.pow(10.0, Utils.textToFloat(Nat8.toText(decimal))))));
+            var isValid : Bool = false;
+
+            if(total_txs_icrc > 0){
+              label check_icrc_txs for (i in Iter.range(0, total_txs_icrc - 1)) {
+                switch (validateICRCTransfer_(tx.canister, from_, to_, Nat64.toNat(amt), txs_icrc[i], (i + res_icrc.first_index))) {
+                  case (#ok _) {
+                    isValid := true;
+                    break check_icrc_txs;
+                  };
+                  case (#err e) {};
+                };
+              };  
+
+            };
+
+            if (isValid == false) {
+              return #err("some icrc txs are not valid or are too old");
+            };
+          };
+        };
+
+        // Validating NFT Tx
+        let nftTx = constraints.nftConstraint;
+        if (nftTx.size() != 0) {
+          for (tx in nftTx.vals()) {
+            switch (tx.nftConstraintType) {
+              case (#transfer t) {
+                let nft_canister = actor (tx.canister) : actor {
+                  getUserNftTx : shared (Text, EXT.TxKind) -> async ([EXT.TxInfo]);
+                };
+                let user_txs = await nft_canister.getUserNftTx(uid, #transfer);
+
+                let result = validateNftTransfer_(tx.canister, user_txs, uid, tx.nftConstraintType, tx.metadata);
+
+                switch (result) {
+                  case (#ok _) {};
+                  case (#err e) {
+                    return #err("some nft txs are not valid or already validated");
+                  };
+                };
+              };
+              case (#hold h) {
+                switch (h) {
+                  case (#boomEXT) {
+                    let nft_canister = actor (tx.canister) : actor {
+                      getUserNftTx : shared (Text, EXT.TxKind) -> async ([EXT.TxInfo]);
+                    };
+                    let user_txs = await nft_canister.getUserNftTx(uid, #hold);
+                    let result = validateNftTransfer_(tx.canister, user_txs, uid, tx.nftConstraintType, tx.metadata);
+                    switch (result) {
+                      case (#ok _) {};
+                      case (#err e) {
+                        return #err("some nft txs are not valid or already validated");
+                      };
+                    };
+                  };
+                  case (#originalEXT) {
+                    let nft_canister = actor (tx.canister) : actor {
+                      getRegistry : shared query () -> async [(EXT.TokenIndex, EXT.AccountIdentifier)];
+                    };
+                    let registry = await nft_canister.getRegistry();
+                    var isValid = false;
+                    label registry_check for (i in registry.vals()) {
+                      if (i.1 == AccountIdentifier.fromText(uid, null)) {
+                        isValid := true;
+                        break registry_check;
+                      };
+                    };
+                    if (isValid == false) {
+                      return #err("user does not hold any nft from this collection");
+                    };
+                  };
+                };
+              };
             };
           };
         };
@@ -334,59 +689,17 @@ actor class UserNode() {
     return #ok(a);
   };
 
-  public shared ({ caller }) func processAction(uid : TGlobal.userId, aid : TGlobal.actionId, actionConstraint : ?ActionTypes.ActionConstraint, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+  public shared ({ caller }) func applyOutcomes(uid : TGlobal.userId, actionState : ActionTypes.ActionState, outcomes : [ActionTypes.ActionOutcomeOption]) : async (Result.Result<(), Text>) {
     let wid = Principal.toText(caller);
-    //checks
+    //Check for permition
     for (outcome in outcomes.vals()) {
       switch (outcome.option) {
-        case (#decrementNumber val) {
-          let entityWid = switch (val.wid) {
+        case (#updateEntity updateEntity) {
+          let entityWid = switch (updateEntity.wid) {
             case (?value) { value };
             case (_) { wid };
           };
-          if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
-            return #err("caller not authorized to processActionEntities");
-          };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              // switch (Trie.find(entity.fields, Utils.keyT(val.field), Text.equal)) {
-              switch (Map.get(entity.fields, thash, val.field)) {
-                case (?current_val) { };
-                case _ {
-                  return #err(val.eid # " Entity does not contain field : " #val.field # ", can't decrementNumber from a non-existing entity field");
-                };
-              };
-            };
-            case _ {
-              return #err(val.eid # " Entity does not exist, can't decrementNumber from a non-existing entity");
-            };
-          };
-        };
-        case (#incrementNumber val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
-            return #err("caller not authorized to processActionEntities");
-          };
-        };
-        case (#deleteEntity de) {
-          let entityWid = switch (de.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          if (isPermitted_(entityWid, de.gid, de.eid, wid) == false) {
-            return #err("caller not authorized to processActionEntities");
-          };
-        };
-        case (#renewTimestamp val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          if (isPermitted_(entityWid, val.gid, val.eid, wid) == false) {
+          if (isPermitted_(entityWid, updateEntity.gid, updateEntity.eid, wid) == false) {
             return #err("caller not authorized to processActionEntities");
           };
         };
@@ -394,279 +707,268 @@ actor class UserNode() {
       };
     };
 
-    var b = Buffer.Buffer<EntityTypes.StableEntity>(0);
+    _actionStates := Trie.put3D(_actionStates, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(actionState.actionId), Text.equal, actionState);
 
-    var response : ActionTypes.ActionResponse = (
-      {
-        intervalStartTs = 0;
-        actionCount = 0;
-        actionId = aid //NEW
-      },
-      [],
-      [],
-      [],
-    );
-    let isActionValid = await validateAction_(uid, wid, aid, actionConstraint);
-    switch (isActionValid) {
-      case (#ok a) {
-        _actionStates := Trie.put3D(_actionStates, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, Utils.keyT(aid), Text.equal, a);
-        response := (a, [], [], []);
-      };
-      case (#err a) {
-        return #err("Error: " #a);
-      };
-    };
-
-    // updating entities
+    // uUpdating entities
     for (outcome in outcomes.vals()) {
+
+      //FIRST SWITCH
       switch (outcome.option) {
-        //NEW
-        case (#setNumber val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _fields = entity.fields;
-              // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(val.value)).0;
-              ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add({
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = Map.toArray(_fields);
-              });
-            };
-            case _ {
-              var _fields = Map.new<Text, Text>();
-              // _fields := Trie.put(_fields, Utils.keyT(val.field), Text.equal, Float.toText(val.value)).0;
-              ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
-              var new_entity : EntityTypes.Entity = {
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
-              b.add({
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = Map.toArray(_fields);
-              });
-            };
-          };
-        };
-        // // //
-        case (#decrementNumber val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _fields = entity.fields;
-              switch (Map.get(entity.fields, thash, val.field)) {
-                case (?current_val) {
-                  let current_val_in_float = Utils.textToFloat(current_val);
-                  ignore Map.put(_fields, thash, val.field, Float.toText(Float.sub(current_val_in_float, val.value)));
-                };
-                case _ {
-                  return #err(val.eid # " Entity does not contain field : " #val.field # ", can't decrementNumber from a non-existing entity field");
-                };
-              };
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add({
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = Map.toArray(_fields);
-              });
-            };
-            case _ {
-              return #err(val.eid # " Entity does not exist, can't decrementNumber from a non-existing entity");
-            };
-          };
-        };
-        case (#incrementNumber val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _fields = entity.fields;
-              switch (Map.get(entity.fields, thash, val.field)) {
-                case (?current_val) {
-                  let current_val_in_float = Utils.textToFloat(current_val);
-                  ignore Map.put(_fields, thash, val.field, Float.toText(Float.add(current_val_in_float, val.value)));
-                };
-                case _ {
-                  ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
-                };
-              };
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add({
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = Map.toArray(_fields);
-              });
-            };
-            case _ {
-              //NEW
-              var _fields = Map.new<Text, Text>();
-              ignore Map.put(_fields, thash, val.field, Float.toText(val.value));
-              var new_entity : EntityTypes.Entity = {
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
-              b.add({
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = Map.toArray(_fields);
-              });
-            };
-          };
-        };
-        case (#setString val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _fields = entity.fields;
-              ignore Map.put(_fields, thash, val.field, val.value);
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add({
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = Map.toArray(_fields);
-              });
-            };
-            case _ {
-              var _fields = Map.new<Text, Text>();
-              ignore Map.put(_fields, thash, val.field, val.value);
-              var new_entity : EntityTypes.Entity = {
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = _fields;
-              };
-              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
-              b.add({
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = Map.toArray(_fields);
-              });
-            };
-          };
-        };
-        case (#renewTimestamp val) {
-          let entityWid = switch (val.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          var _entity = getEntity_(uid, entityWid, val.gid, val.eid);
-          switch (_entity) {
-            case (?entity) {
-              var _fields = entity.fields;
 
-              switch(Map.get(_fields, thash, val.field)){
-                case (?current_val) {
-                  let current_val_in_nat = Utils.textToNat(current_val);
+        case (#updateEntity updateEntity) {
+          let entityWid = switch (updateEntity.wid) {
+            case (?value) { value };
+            case (_) { wid };
+          };
 
-                  if(current_val_in_nat > Time.now()) {
-                    ignore Map.put(_fields, thash, val.field, Nat.toText(current_val_in_nat + val.value));
-                  }
-                  else ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
-                };
-                case _ {
-                  ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
-                };
+          let groupId = updateEntity.gid;
+          let entityId = updateEntity.eid;
+
+          //SECOND SWITCH
+          switch (updateEntity.updateType) {
+            case (#setNumber updateType) {
+              //
+              var _entity = getEntity_(uid, entityWid, groupId, entityId);
+
+              var number = 0.0;
+              switch (updateType.value) {
+                case (#number _number) number := _number;
+                case _ return #err "this outcome must be of #number update type";
               };
 
-              var new_entity : EntityTypes.Entity = {
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = _fields;
+              //THIRD SWITCH
+              switch (_entity) {
+                case (?entity) {
+                  var _fields = entity.fields;
+
+                  ignore Map.put(_fields, thash, updateType.field, Float.toText(number));
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+                };
+                case _ {
+                  var _fields = Map.new<Text, Text>();
+
+                  ignore Map.put(_fields, thash, updateType.field, Float.toText(number));
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entityWid, groupId, entityId, new_entity);
+                };
               };
-              _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
-              b.add({
-                eid = entity.eid;
-                gid = entity.gid;
-                wid = entity.wid;
-                fields = Map.toArray(_fields);
-              });
+              //
             };
-            case _ {
-              var _fields = Map.new<Text, Text>();
-              ignore Map.put(_fields, thash, val.field, Int.toText(val.value + Time.now()));
-              var new_entity : EntityTypes.Entity = {
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = _fields;
+            case (#decrementNumber updateType) {
+              //
+              var _entity = getEntity_(uid, entityWid, groupId, entityId);
+
+              var number = 0.0;
+              switch (updateType.value) {
+                case (#number _number) number := _number;
+                case _ return #err "this outcome must be of #number update type";
               };
-              _entities := entityPut4D_(_entities, uid, entityWid, val.gid, val.eid, new_entity);
-              b.add({
-                eid = val.eid;
-                gid = val.gid;
-                wid = entityWid;
-                fields = Map.toArray(_fields);
-              });
+
+              //THIRD SWITCH
+              switch (_entity) {
+                case (?entity) {
+                  var _fields = entity.fields;
+                  switch (Map.get(entity.fields, thash, updateType.field)) {
+                    case (?current_val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+                      ignore Map.put(_fields, thash, updateType.field, Float.toText(Float.sub(current_val_in_float, number)));
+                    };
+                    case _ {
+                      return #err(entityId # " Entity does not contain field : " #updateType.field # ", can't decrementNumber from a non-existing entity field");
+                    };
+                  };
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+                };
+                case _ {
+                  return #err(entityId # " Entity does not exist, can't decrementNumber from a non-existing entity");
+                };
+              };
+              //
+            };
+            case (#incrementNumber updateType) {
+              //
+              var _entity = getEntity_(uid, entityWid, groupId, entityId);
+
+              var number = 0.0;
+              switch (updateType.value) {
+                case (#number _number) number := _number;
+                case _ return #err "this outcome must be of #number update type";
+              };
+
+              //THIRD SWITCH
+              switch (_entity) {
+                case (?entity) {
+                  var _fields = entity.fields;
+                  switch (Map.get(entity.fields, thash, updateType.field)) {
+                    case (?current_val) {
+                      let current_val_in_float = Utils.textToFloat(current_val);
+                      ignore Map.put(_fields, thash, updateType.field, Float.toText(Float.add(current_val_in_float, number)));
+                    };
+                    case _ {
+                      ignore Map.put(_fields, thash, updateType.field, Float.toText(number));
+                    };
+                  };
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+                };
+                case _ {
+                  var _fields = Map.new<Text, Text>();
+                  ignore Map.put(_fields, thash, updateType.field, Float.toText(number));
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entityWid, groupId, entityId, new_entity);
+                };
+              };
+              //
+            };
+            case (#setText updateType) {
+              //
+              var _entity = getEntity_(uid, entityWid, groupId, entityId);
+
+              //THIRD SWITCH
+              switch (_entity) {
+                case (?entity) {
+                  var _fields = entity.fields;
+                  ignore Map.put(_fields, thash, updateType.field, updateType.value);
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+                };
+                case _ {
+                  var _fields = Map.new<Text, Text>();
+                  ignore Map.put(_fields, thash, updateType.field, updateType.value);
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entityWid, groupId, entityId, new_entity);
+                };
+              };
+              //
+            };
+            case (#renewTimestamp updateType) {
+              //
+              var _entity = getEntity_(uid, entityWid, groupId, entityId);
+
+              var number : Int = 0;
+              switch (updateType.value) {
+                case (#number _number) number := Float.toInt(_number);
+                case _ return #err "this outcome must be of #number update type";
+              };
+
+              //THIRD SWITCH
+              switch (_entity) {
+                case (?entity) {
+                  var _fields = entity.fields;
+
+                  switch (Map.get(_fields, thash, updateType.field)) {
+                    case (?current_val) {
+                      let current_val_in_nat = Utils.textToNat(current_val);
+
+                      if (current_val_in_nat > Time.now()) {
+                        ignore Map.put(_fields, thash, updateType.field, Nat.toText(current_val_in_nat + Utils.intToNat(number)));
+                      } else ignore Map.put(_fields, thash, updateType.field, Int.toText(number + Time.now()));
+                    };
+                    case _ {
+                      ignore Map.put(_fields, thash, updateType.field, Int.toText(number + Time.now()));
+                    };
+                  };
+
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+                };
+                case _ {
+                  var _fields = Map.new<Text, Text>();
+                  ignore Map.put(_fields, thash, updateType.field, Int.toText(number + Time.now()));
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+
+                  _entities := entityPut4D_(_entities, uid, entityWid, groupId, entityId, new_entity);
+                };
+              };
+              //
+            };
+            case (#deleteEntity updateType) {
+              _entities := entityRemove4D_(_entities, uid, entityWid, groupId, entityId);
+            };
+            case (#replaceText updateType) {
+              var _entity = getEntity_(uid, entityWid, groupId, entityId);
+
+              //THIRD SWITCH
+              switch (_entity) {
+                case (?entity) {
+                  var _fields = entity.fields;
+                  switch (Map.get(entity.fields, thash, updateType.field)) {
+                    case (?current_val) {
+                      let newText = Text.replace(current_val, #text(updateType.oldText), updateType.newText);
+                      ignore Map.put(_fields, thash, updateType.field, newText);
+                    };
+                    case _ {
+                      return #err(entityId # " Entity does not contain field : " #updateType.field # ", can't decrementNumber from a non-existing entity field");
+                    };
+                  };
+                  var new_entity : EntityTypes.Entity = {
+                    eid = entityId;
+                    gid = groupId;
+                    wid = entityWid;
+                    fields = _fields;
+                  };
+                  _entities := entityPut4D_(_entities, uid, entity.wid, entity.gid, entity.eid, new_entity);
+                };
+                case _ {
+                  return #err(entityId # " Entity does not exist, can't decrementNumber from a non-existing entity");
+                };
+              };
+
             };
           };
-        };
-        case (#deleteEntity de) {
-          let entityWid = switch (de.wid) {
-            case (?value) { value };
-            case (_) { wid };
-          };
-          _entities := entityRemove4D_(_entities, uid, entityWid, de.gid, de.eid);
+          //
         };
         case _ {};
       };
     };
-    return #ok(Buffer.toArray(b));
+    return #ok();
   };
 
   public shared ({ caller }) func manuallyOverwriteEntities(uid : TGlobal.userId, gid : TGlobal.groupId, entities : [EntityTypes.StableEntity]) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
@@ -691,6 +993,7 @@ actor class UserNode() {
   public shared ({ caller }) func adminCreateUser(uid : Text) : async () {
     assert (isWorldHub_(caller));
     _entities := Trie.put(_entities, Utils.keyT(uid), Text.equal, Trie.empty()).0;
+    _actionStates := Trie.put(_actionStates, Utils.keyT(uid), Text.equal, Trie.empty()).0;
   };
 
   // utils

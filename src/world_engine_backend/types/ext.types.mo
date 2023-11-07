@@ -14,7 +14,7 @@ import Nat64 "mo:base/Nat64";
 module {
     public type AccountIdentifier = Text;
     public type TokenIndex = Nat32;
-    public type TokenIdentifier  = Text;
+    public type TokenIdentifier = Text;
     public type Metadata = {
         #fungible : {
             name : Text;
@@ -29,6 +29,26 @@ module {
             metadata : ?MetadataContainer;
         };
     };
+    public type Tx = {
+        index : TokenIndex;
+        previous_holder : AccountIdentifier;
+        current_holder : AccountIdentifier;
+    };
+
+    public type TxInfo = {
+        txid : Text;
+        index : TokenIndex;
+        previous_holder : AccountIdentifier;
+        current_holder : AccountIdentifier;
+        kind : TxKind;
+        metadata : ?Text;
+    };
+
+    public type TxKind = {
+        #hold;
+        #transfer;
+    };
+
     public type MetadataContainer = {
         #data : [MetadataValue];
         #blob : Blob;
