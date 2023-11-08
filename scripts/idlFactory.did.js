@@ -1,66 +1,58 @@
 export const idlFactory = ({ IDL }) => {
-  const Result = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
-  const AccountIdentifier = IDL.Text;
-  const entityId = IDL.Text;
-  const groupId = IDL.Text;
-  const worldId = IDL.Text;
-  const EntityPermission = IDL.Record({
-    'eid' : entityId,
-    'gid' : groupId,
-    'wid' : worldId,
+  const World = IDL.Record({
+    'name' : IDL.Text,
+    'cover' : IDL.Text,
+    'canister' : IDL.Text,
   });
-  const TokenIndex = IDL.Nat32;
-  const TokenIdentifier = IDL.Text;
-  const GlobalPermission = IDL.Record({ 'wid' : worldId });
+  const headerField = IDL.Tuple(IDL.Text, IDL.Text);
+  const HttpRequest = IDL.Record({
+    'url' : IDL.Text,
+    'method' : IDL.Text,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(headerField),
+  });
+  const HttpResponse = IDL.Record({
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(headerField),
+    'status_code' : IDL.Nat16,
+  });
+  const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   return IDL.Service({
     'addAdmin' : IDL.Func([IDL.Text], [], []),
-    'admin_create_user' : IDL.Func([IDL.Text], [Result], []),
-    'admin_delete_user' : IDL.Func([IDL.Text], [], []),
-    'checkUsernameAvailability' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
-    'createNewUser' : IDL.Func([IDL.Principal], [Result], []),
+    'addController' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'createWorldCanister' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
     'cycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
-    'getAccountIdentifier' : IDL.Func(
-        [IDL.Text],
-        [AccountIdentifier],
-        ['query'],
-      ),
     'getAllAdmins' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
-    'getAllNodeIds' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
-    'getEntityPermissionsOfWorld' : IDL.Func(
+    'getAllWorlds' : IDL.Func(
         [],
-        [
-          IDL.Vec(
-            IDL.Tuple(IDL.Text, IDL.Vec(IDL.Tuple(IDL.Text, EntityPermission)))
-          ),
-        ],
-        [],
-      ),
-    'getGlobalPermissionsOfWorld' : IDL.Func([], [IDL.Vec(worldId)], []),
-    'getTokenIdentifier' : IDL.Func(
-        [IDL.Text, TokenIndex],
-        [TokenIdentifier],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         ['query'],
       ),
-    'getUserNodeCanisterId' : IDL.Func([IDL.Text], [Result], ['query']),
-    'getUserNodeWasmVersion' : IDL.Func([], [IDL.Text], ['query']),
-    'grantEntityPermission' : IDL.Func([EntityPermission], [], []),
-    'grantGlobalPermission' : IDL.Func([GlobalPermission], [], []),
-    'importAllPermissionsOfWorld' : IDL.Func([IDL.Text], [Result], []),
-    'importAllUsersDataOfWorld' : IDL.Func([IDL.Text], [Result], []),
+    'getLatestWorldWasmVersion' : IDL.Func([], [IDL.Text], ['query']),
+    'getOwner' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
+    'getTotalWorlds' : IDL.Func([], [IDL.Nat], ['query']),
+    'getUserTotalWorlds' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
+    'getUserWorlds' : IDL.Func(
+        [IDL.Text, IDL.Nat],
+        [IDL.Vec(World)],
+        ['query'],
+      ),
+    'getWorldCover' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getWorldDetails' : IDL.Func([IDL.Text], [IDL.Opt(World)], ['query']),
+    'getWorldVersion' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getWorlds' : IDL.Func([IDL.Nat], [IDL.Vec(World)], ['query']),
+    'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
     'removeAdmin' : IDL.Func([IDL.Text], [], []),
-    'removeEntityPermission' : IDL.Func([EntityPermission], [], []),
-    'removeGlobalPermission' : IDL.Func([GlobalPermission], [], []),
-    'setUsername' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
-    'totalUsers' : IDL.Func([], [IDL.Nat], ['query']),
-    'updateUserNodeWasmModule' : IDL.Func(
-        [IDL.Record({ 'wasm' : IDL.Vec(IDL.Nat8), 'version' : IDL.Text })],
-        [IDL.Int],
+    'removeController' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'updateWorldCover' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
+    'upgradeWorldToNewWasm' : IDL.Func(
+        [IDL.Text, IDL.Vec(IDL.Nat8)],
+        [Result],
         [],
       ),
-    'upgrade_usernodes' : IDL.Func([], [], []),
-    'validate_upgrade_usernodes' : IDL.Func(
-        [IDL.Int],
-        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+    'uploadNewWasmModule' : IDL.Func(
+        [IDL.Record({ 'wasmModule' : IDL.Vec(IDL.Nat8) })],
+        [Result],
         [],
       ),
   });

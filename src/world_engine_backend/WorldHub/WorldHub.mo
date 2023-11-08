@@ -150,6 +150,14 @@ actor WorldHub {
         return _admins;
     };
 
+    public query func getAllUserIds() : async ([Text]) {
+        var uids = Buffer.Buffer<Text>(0);
+        for((i, v) in Trie.iter(_uids)) {
+            uids.add(i);
+        };
+        return Buffer.toArray(uids);
+    };
+
     public query func checkUsernameAvailability(_u : Text) : async (Bool) {
         switch (Trie.find(_usernames, Utils.keyT(_u), Text.equal)) {
             case (?t) {
@@ -440,7 +448,7 @@ actor WorldHub {
         version : Text;
         wasm : Blob;
     }) : async (Int) {
-        assert(caller != Principal.fromText("2vxsx-fae"));
+        assert(caller != Principal.fromText("2ot7t-idkzt-murdg-in2md-bmj2w-urej7-ft6wa-i4bd3-zglmv-pf42b-zqe"));
         usernode_wasm_module := {
             version = arg.version;
             wasm = arg.wasm;

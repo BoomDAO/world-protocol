@@ -105,7 +105,7 @@ actor PaymentHub {
     let ICP_Ledger : Ledger.ICP = actor (ENV.Ledger);
     var res : ICP.QueryBlocksResponse = await ICP_Ledger.query_blocks(req);
     var toAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(toPrincipal, null);
-    var fromAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(fromPrincipal, null);
+    var fromAccountId : AccountIdentifier.AccountIdentifier = AccountIdentifier.fromText(fromPrincipal, null);  
 
     var blocks : [ICP.Block] = res.blocks;
     var base_block : ICP.Block = blocks[0];
@@ -142,7 +142,6 @@ actor PaymentHub {
       start = blockIndex;
       length = blockIndex + 1;
     };
-
     var to_ : ICRC1.Account = {
       owner = Principal.fromText(toPrincipal);
       subaccount = null;
