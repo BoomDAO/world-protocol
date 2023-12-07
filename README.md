@@ -17,7 +17,7 @@ The World Protocol has a central hub that tracks and manages the permissions of 
 To dive deeper into the World Protocol, read the tech docs here: https://docs.boomdao.xyz/world-engine
 
 <p align="center">
-  <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/40c77572-9ce7-4b01-9c26-9b167a82c5ee" alt="my banner"></a>
+  <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/dee5d2ce-ec63-4d8a-be20-0b27d3bce407" alt="my banner"></a>
 </p>
 
 ## VERIFYING CANISTER BUILDS
@@ -41,9 +41,3 @@ To get the hash for Canisters deployment:
 - Open the latest succesful run. ([Click to see an example run](https://github.com/BoomDAO/world-engine/actions/runs/5630551731))
 - Go to `Build and Deploy all BOOM DAO World Engine Canisters` job.
 - Open `Deploy All Canisters` step. Scroll to the end of this Job, you should find the `Module hash` in this step. This value should match the value you got locally. 
-
-## TECHNICAL ARCHITECTURE
-
-<p align="center">
-  <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/dee5d2ce-ec63-4d8a-be20-0b27d3bce407" alt="my banner"></a>
-</p>
