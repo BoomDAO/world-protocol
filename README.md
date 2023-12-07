@@ -2,21 +2,18 @@
   <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/game-launcher/assets/29381374/875537bb-f9d4-4594-84e0-a7375ce46213" alt="my banner"></a>
 </p>
 
-## WORLD ENGINE PROTOCOL
+## WORLD PROTOCOL
 
-A comprehensive, fully on-chain **game server protocol** that provides a universal game-centric database, modular game logic, composable data standards, and customizable access control for interactions across game worlds. All worlds built with the World Engine Protocol are interoperable from Day 1. It's further enriched with functionalities for NFT/ICP/ICRC payments, staking, minting, and burning.
+A comprehensive, fully on-chain **game server protocol** that provides a universal game-centric database, modular game logic, composable data standards, and customizable access control for interactions across game worlds. All worlds built with the World Protocol are interoperable from Day 1. It's further enriched with functionalities for NFT/ICP/ICRC payments, minting, and burning.
 
-The World Engine has 3 separate services:
+The World Protocol has a central hub that tracks and manages the permissions of each game World. This hub also tracks the canisters that store the data for all the users that connect to the World Protocol.
 
-**WorldHub**: A shared universal game database and access control manager that connects all game Worlds on the Internet Computer.
-
-**PaymentHub**: A shared service for handling payments of ICP/ICRC/NFTs in-game. 
-
-**StakingHub**: A shared service for handling staking of ICP/ICRC/NFTs in-game. 
+**WorldHub**: A hub that manages and connects all game Worlds on the World Protocol.
+**UserNode**: Data canisters that store the data for Users on the World Protocol.
 
 ## TECH DOCUMENTATION
 
-To dive deeper into the World Engine, read the tech docs here: https://docs.boomdao.xyz/world-engine
+To dive deeper into the World Protocol, read the tech docs here: https://docs.boomdao.xyz/world-engine
 
 <p align="center">
   <a href="logo" target="_blank" rel="noreferrer"><img src="https://github.com/BoomDAO/world-engine/assets/29381374/40c77572-9ce7-4b01-9c26-9b167a82c5ee" alt="my banner"></a>
@@ -24,7 +21,7 @@ To dive deeper into the World Engine, read the tech docs here: https://docs.boom
 
 ## VERIFYING CANISTER BUILDS
 
-To get the hash for World Engine Protocol canisters:
+To get the hash for World Protocol canisters:
 
 - Get the canister IDs from [`canister_ids.json`](https://github.com/BoomDAO/world-engine/blob/main/canister_ids.json).
 - Get hash using the DFX SDK by running: `dfx canister --network ic info <canister-id>`.
