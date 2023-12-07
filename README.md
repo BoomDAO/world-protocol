@@ -9,6 +9,7 @@ A comprehensive, fully on-chain **game server protocol** that provides a univers
 The World Protocol has a central hub that tracks and manages the permissions of each game World. This hub also tracks the canisters that store the data for all the users that connect to the World Protocol.
 
 **WorldHub**: A hub that manages and connects all game Worlds on the World Protocol.
+
 **UserNode**: Data canisters that store the data for Users on the World Protocol.
 
 ## TECH DOCUMENTATION
