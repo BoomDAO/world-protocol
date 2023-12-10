@@ -81,11 +81,12 @@ module {
             settings : canister_settings;
         } -> async ();
         install_code : shared {
-            arg : [Nat8];
+            arg : Blob;
             wasm_module : wasm_module;
-            mode : { #reinstall; #upgrade; #install };
+            mode : { #reinstall; #upgrade : ? {
+                skip_pre_upgrade : ?Bool;
+            }; #install };
             canister_id : canister_id;
-            sender_canister_version : ?Nat64;
         } -> async ();
     };
 };
