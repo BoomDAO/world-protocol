@@ -445,6 +445,105 @@ actor class UserNode() {
     return #ok(Buffer.toArray(res));
   };
 
+  public query func getAllUserEntitiesOfAllWorlds(uid : TGlobal.userId, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var entities = Buffer.Buffer<EntityTypes.StableEntity>(0);
+    let ?userEntitiesTrie = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+    for ((worldId, trie) in Trie.iter(userEntitiesTrie)) {
+      for ((id, entity) in Trie.iter(trie)) {
+        var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+        for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+          fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+        };
+        entities.add({
+          eid = entity.eid;
+          wid = entity.wid;
+          fields = Buffer.toArray(fieldsBuffer);
+        });
+      };
+    };
+    switch (page) {
+      case (?p) {
+        var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
+        let page_size = 20;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, entities.size());
+        let _entities = Buffer.toArray(entities);
+        for (i in Iter.range(start, end - 1)) {
+          res.add(_entities[i]);
+        };
+        return #ok(Buffer.toArray(res));
+      };
+      case _ {
+        return #ok(Buffer.toArray(entities));
+      };
+    };
+  };
+
+  //HERE
+  public query func getAllUserEntitiesOfSpecificWorlds(uid : TGlobal.userId, wids : [TGlobal.worldId], page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var entities = Buffer.Buffer<EntityTypes.StableEntity>(0);
+
+    label worldLoop for(wid in Iter.fromArray(wids))
+    {
+
+      let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+      let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else continue worldLoop;
+
+      switch (page) {
+        case (?p) {
+
+          let eids = Buffer.Buffer<Text>(0);
+
+          for ((i, v) in Trie.iter(w)) {
+            eids.add(i);
+          };
+
+          let page_size = 20;
+          var start = p * page_size;
+          var end = Nat.min(start + page_size, eids.size());
+          let _eids = Buffer.toArray(eids);
+
+          for (i in Iter.range(start, end - 1)) {
+            switch (Trie.find(w, Utils.keyT(_eids[i]), Text.equal)) {
+              case (?entity) {
+                var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+                for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                  fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+                };
+                entities.add({
+                  eid = entity.eid;
+                  wid = entity.wid;
+                  fields = Buffer.toArray(fieldsBuffer);
+                });
+              };
+              case _ {};
+            };
+          };
+
+        };
+        case _ {
+
+          for ((eid, entity) in Trie.iter(w)) {
+            var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+            for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+              fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+            };
+            entities.add({
+              eid = entity.eid;
+              wid = entity.wid;
+              fields = Buffer.toArray(fieldsBuffer);
+            });
+          };
+          
+        };
+      };
+
+    };
+
+    return #ok(Buffer.toArray(entities));
+  };
+
+  //HERE
   public query func getAllUserEntities(uid : TGlobal.userId, wid : TGlobal.worldId, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
     let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
@@ -455,7 +554,7 @@ actor class UserNode() {
         for ((i, v) in Trie.iter(w)) {
           eids.add(i);
         };
-        let page_size = 9;
+        let page_size = 20;
         var start = p * page_size;
         var end = Nat.min(start + page_size, eids.size());
         let _eids = Buffer.toArray(eids);

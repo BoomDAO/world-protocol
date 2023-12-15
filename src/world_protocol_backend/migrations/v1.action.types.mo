@@ -136,8 +136,10 @@ module {
     //EDITED
     public type ActionConstraint = {
         timeConstraint : ?{
-            intervalDuration : Nat;
-            actionsPerInterval : Nat;
+            actionTimeInterval : ? {
+                intervalDuration : Nat;
+                actionsPerInterval : Nat;
+            };
             actionExpirationTimestamp : ?Nat;
         };
         entityConstraint : [TConstraints.EntityConstraint];
