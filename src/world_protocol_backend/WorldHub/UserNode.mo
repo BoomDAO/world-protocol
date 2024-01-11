@@ -671,6 +671,13 @@ actor class UserNode() {
     };
     return Buffer.toArray(b);
   };
+  
+  public query func containsUserId(uid : TGlobal.userId) : async Bool {
+    switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
+        case (?user) return true;
+        case _ return false;
+    };
+  };
 
   public query func getAllWorldUserIds(wid : TGlobal.worldId) : async [TGlobal.userId] {
     var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);

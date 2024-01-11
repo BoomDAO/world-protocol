@@ -1,7 +1,8 @@
 export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'ok' : IDL.Text, 'err' : IDL.Text });
-  const AccountIdentifier = IDL.Text;
   const userId = IDL.Text;
+  const nodeId = IDL.Text;
+  const AccountIdentifier = IDL.Text;
   const entityId = IDL.Text;
   const worldId = IDL.Text;
   const Field = IDL.Record({ 'fieldName' : IDL.Text, 'fieldValue' : IDL.Text });
@@ -21,6 +22,7 @@ export const idlFactory = ({ IDL }) => {
     'checkUsernameAvailability' : IDL.Func([IDL.Text], [IDL.Bool], ['query']),
     'createNewUser' : IDL.Func([IDL.Principal], [Result], []),
     'cycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
+    'deleteCache' : IDL.Func([], [IDL.Vec(IDL.Tuple(userId, nodeId))], []),
     'getAccountIdentifier' : IDL.Func(
         [IDL.Text],
         [AccountIdentifier],

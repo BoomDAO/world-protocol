@@ -53,6 +53,8 @@ actor WorldHub {
     private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
     private func WorldHubCanisterId() : Principal = Principal.fromActor(WorldHub);
 
+    private stable var _delete_cache_response : [(TGlobal.userId, TGlobal.nodeId)] = [];
+
     //Internals Functions
     private func countUsers_(nid : Text) : (Nat32) {
         var count : Nat32 = 0;
@@ -165,6 +167,10 @@ actor WorldHub {
 
     public query func getAccountIdentifier(p : Text) : async AccountIdentifier.AccountIdentifier {
         return AccountIdentifier.fromText(p, null);
+    };
+
+    public query func getDeleteCacheResponse() : async [(TGlobal.userId, TGlobal.nodeId)] {
+        return _delete_cache_response;
     };
 
     //Updates
@@ -499,6 +505,30 @@ actor WorldHub {
                 sender_canister_version = null;
             });
         };
+    };
+
+    public shared ({ caller }) func validate_delete_cache() : async ({
+        #Ok : Text;
+        #Err : Text;
+    }) {
+        return #Ok("validated_delete_cache");
+    };
+
+    public shared ({ caller }) func delete_cache() : async () {
+        assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
+        var uidToNodeIdBindingIssue = Buffer.Buffer<(TGlobal.userId, TGlobal.nodeId)>(0);
+        for ((uid, nodeId) in Trie.iter(_uids)){
+            let node = actor (nodeId) : actor {
+                adminCreateUser : shared (Text) -> async ();
+                containsUserId : shared (uid : TGlobal.userId) -> async (Bool);
+            };
+            var containsUserId = await node.containsUserId(uid);
+            if(containsUserId == false){
+                ignore node.adminCreateUser(uid);
+                uidToNodeIdBindingIssue.add(uid, nodeId);
+            }
+        };
+        _delete_cache_response := Buffer.toArray(uidToNodeIdBindingIssue);
     };
 
 };
