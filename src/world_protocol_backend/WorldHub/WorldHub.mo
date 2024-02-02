@@ -30,6 +30,7 @@ import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
 
 import UserNode "./UserNode";
+import AssetNode "./AssetNode";
 import JSON "../utils/Json";
 import Parser "../utils/Parser";
 import ENV "../utils/Env";
@@ -47,7 +48,9 @@ actor WorldHub {
     //stable memory
     private stable var _uids : Trie.Trie<TGlobal.userId, TGlobal.nodeId> = Trie.empty(); //mapping user_id -> node_canister_id
     private stable var _usernames : Trie.Trie<Text, TGlobal.userId> = Trie.empty(); //mapping username -> _uid
+    private stable var _assetInfo : Trie.Trie<Text, Text> = Trie.empty(); // mapping user_id -> assertNode_canister_id
     private stable var _nodes : [TGlobal.nodeId] = []; //all user db canisters as nodes
+    private stable var _assetNodes : [TGlobal.nodeId] = []; // all asset node ids for users
     private stable var _admins : [Text] = []; //admins for user db
     private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
     private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.userId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
@@ -99,6 +102,14 @@ actor WorldHub {
         return Principal.toText(canister_id);
     };
 
+    private func createAssetCanister_() : async (Text) {
+        Cycles.add(2000000000000);
+        let canister = await AssetNode.AssetNode();
+        let _ = await updateCanister_(canister); // update canister permissions and settings
+        let canister_id = Principal.fromActor(canister);
+        return Principal.toText(canister_id);
+    };
+
     private func isAdmin_(_p : Principal) : (Bool) {
         var p : Text = Principal.toText(_p);
         for (i in _admins.vals()) {
@@ -125,6 +136,40 @@ actor WorldHub {
 
     //Queries
     //
+    public composite query func getUserProfile(arg : { uid : Text }) : async ({
+        uid : Text;
+        username : Text;
+        image : Text;
+    }) {
+        var res = {
+            uid = arg.uid;
+            username = arg.uid;
+            image = "";
+        };
+        for ((name, uid) in Trie.iter(_usernames)) {
+            if (arg.uid == uid) {
+                res := {
+                    uid = arg.uid;
+                    username = name;
+                    image = "";
+                };
+            };
+        };
+        let ?assetNodeId = Trie.find(_assetInfo, Utils.keyT(arg.uid), Text.equal) else {
+            return res;
+        };
+        let assetNode = actor (assetNodeId) : actor {
+            getProfilePicture : composite query ({ uid : Text }) -> async (Text);
+        };
+        let _image = await assetNode.getProfilePicture(arg);
+        res := {
+            uid = res.uid;
+            username = res.username;
+            image = _image;
+        };
+        return res;
+    };
+
     public query func cycleBalance() : async Nat {
         Cycles.balance();
     };
@@ -142,6 +187,10 @@ actor WorldHub {
 
     public query func getAllNodeIds() : async [Text] {
         return _nodes;
+    };
+
+    public query func getAllAssetNodeIds() : async [Text] {
+        return _assetNodes;
     };
 
     public query func getAllAdmins() : async [Text] {
@@ -174,6 +223,30 @@ actor WorldHub {
     };
 
     //Updates
+    public shared ({ caller }) func uploadProfilePicture(arg : { uid : Text; image : Text }) : async () {
+        assert (caller == Principal.fromText(arg.uid));
+        var assetNodeId : Text = "";
+        label _loop for (i in _assetNodes.vals()) {
+            let assetNode = actor (i) : actor {
+                getCount : shared () -> async (Nat);
+            };
+            let count = await assetNode.getCount();
+            if (count < 1000) {
+                assetNodeId := i;
+                break _loop;
+            };
+        };
+        if (assetNodeId == "") {
+            assetNodeId := await createAssetCanister_();
+            _assetNodes := addText_(_assetNodes, assetNodeId);
+        };
+        let assetNode = actor (assetNodeId) : actor {
+            uploadProfilePicture : shared ({ uid : Text; image : Text }) -> async ();
+        };
+        await assetNode.uploadProfilePicture(arg);
+        _assetInfo := Trie.put(_assetInfo, Utils.keyT(arg.uid), Text.equal, assetNodeId).0;
+    };
+
     public shared ({ caller }) func getEntity(uid : TGlobal.userId, eid : TGlobal.entityId) : async (EntityTypes.StableEntity) {
         let ?canister_id = Trie.find(_uids, Utils.keyT(uid), Text.equal) else {
             return {
@@ -189,7 +262,7 @@ actor WorldHub {
     };
 
     public shared ({ caller }) func updateEntity(arg : { uid : TGlobal.userId; entity : EntityTypes.StableEntity }) : async (Result.Result<Text, Text>) {
-        assert(caller == Principal.fromText(arg.entity.wid));
+        assert (caller == Principal.fromText(arg.entity.wid));
         let ?canister_id = Trie.find(_uids, Utils.keyT(arg.uid), Text.equal) else {
             return #err("userNode canister for user not found");
         };
@@ -517,16 +590,16 @@ actor WorldHub {
     public shared ({ caller }) func delete_cache() : async () {
         assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         var uidToNodeIdBindingIssue = Buffer.Buffer<(TGlobal.userId, TGlobal.nodeId)>(0);
-        for ((uid, nodeId) in Trie.iter(_uids)){
+        for ((uid, nodeId) in Trie.iter(_uids)) {
             let node = actor (nodeId) : actor {
                 adminCreateUser : shared (Text) -> async ();
                 containsUserId : shared (uid : TGlobal.userId) -> async (Bool);
             };
             var containsUserId = await node.containsUserId(uid);
-            if(containsUserId == false){
+            if (containsUserId == false) {
                 ignore node.adminCreateUser(uid);
                 uidToNodeIdBindingIssue.add(uid, nodeId);
-            }
+            };
         };
         _delete_cache_response := Buffer.toArray(uidToNodeIdBindingIssue);
     };

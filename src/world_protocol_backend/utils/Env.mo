@@ -33,7 +33,7 @@ module {
     public let Ledger = "ryjl3-tyaaa-aaaaa-aaaba-cai"; //ICP Ledger canister_id
     public let IC_Management = "aaaaa-aa"; //IC Management canister_id
     public let ckBTCCanisterId = "mxzaz-hqaaa-aaaar-qaada-cai"; //ckBTC as ICRC-1 Token
-    public let WorldHubCanisterId = "j362g-ziaaa-aaaap-abf6a-cai";
+    public let WorldHubCanisterId = "fgpem-ziaaa-aaaag-abi2q-cai";
     public let PaymentHubCanisterId = "5hr3g-hqaaa-aaaap-abbxa-cai"; //!avoid changing this!
     public let StakingHubCanisterId = "jozll-yaaaa-aaaap-abf5q-cai"; //!avoid changing this!
 };
