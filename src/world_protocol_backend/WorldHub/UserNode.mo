@@ -64,6 +64,7 @@ actor class UserNode() {
   private stable var _actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.ActionState>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
+  private stable var _actionHistory : Trie.Trie<TGlobal.userId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>> = Trie.empty(); // userId -> [((Time.now()) as text) -> Outcomes]
 
   //pre-post upgrades
   system func preupgrade() {
@@ -381,6 +382,9 @@ actor class UserNode() {
         case _ {};
       };
     };
+
+    // if all outcomes updated, update recent history of actionOutcomes
+    _actionHistory := Trie.put2D(_actionHistory, Utils.keyT(uid), Text.equal, Utils.keyT(Int.toText(Time.now())), Text.equal, outcomes);
     return #ok();
   };
 
@@ -483,8 +487,7 @@ actor class UserNode() {
   public query func getAllUserEntitiesOfSpecificWorlds(uid : TGlobal.userId, wids : [TGlobal.worldId], page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     var entities = Buffer.Buffer<EntityTypes.StableEntity>(0);
 
-    label worldLoop for(wid in Iter.fromArray(wids))
-    {
+    label worldLoop for (wid in Iter.fromArray(wids)) {
 
       let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
       let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else continue worldLoop;
@@ -534,7 +537,7 @@ actor class UserNode() {
               fields = Buffer.toArray(fieldsBuffer);
             });
           };
-          
+
         };
       };
 
@@ -544,6 +547,55 @@ actor class UserNode() {
   };
 
   //HERE
+  public composite query func getAllUserEntitiesComposite(uid : TGlobal.userId, wid : TGlobal.worldId, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
+    let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+    let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else return #ok(Buffer.toArray(res));
+    switch (page) {
+      case (?p) {
+        let eids = Buffer.Buffer<Text>(0);
+        for ((i, v) in Trie.iter(w)) {
+          eids.add(i);
+        };
+        let page_size = 20;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, eids.size());
+        let _eids = Buffer.toArray(eids);
+        for (i in Iter.range(start, end - 1)) {
+          switch (Trie.find(w, Utils.keyT(_eids[i]), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+      case _ {
+        for ((eid, entity) in Trie.iter(w)) {
+          var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+          for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+            fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+          };
+          res.add({
+            eid = entity.eid;
+            wid = entity.wid;
+            fields = Buffer.toArray(fieldsBuffer);
+          });
+        };
+        return #ok(Buffer.toArray(res));
+      };
+    };
+  };
+
   public query func getAllUserEntities(uid : TGlobal.userId, wid : TGlobal.worldId, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
     let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
@@ -671,11 +723,11 @@ actor class UserNode() {
     };
     return Buffer.toArray(b);
   };
-  
+
   public query func containsUserId(uid : TGlobal.userId) : async Bool {
     switch (Trie.find(_entities, Utils.keyT(uid), Text.equal)) {
-        case (?user) return true;
-        case _ return false;
+      case (?user) return true;
+      case _ return false;
     };
   };
 
@@ -795,4 +847,45 @@ actor class UserNode() {
     };
     return #ok("imported");
   };
+
+  public composite query func getActionHistoryComposite(uid : TGlobal.userId) : async ([ActionTypes.ActionOutcomeHistory]) {
+    let current_time = Time.now();
+    let time_range = 259200000000000; // 72 hrs
+    let ?user_history = Trie.find(_actionHistory, Utils.keyT(uid), Text.equal) else return [];
+    var res = Buffer.Buffer<ActionTypes.ActionOutcomeHistory>(0);
+    for ((time, outcomes) in Trie.iter(user_history)) {
+      let time_val = Utils.textToNat(time);
+      if (time_val > (current_time - time_range)) {
+        for (outcome in outcomes.vals()) {
+          let history_outcome : ActionTypes.ActionOutcomeHistory = {
+            option = outcome.option;
+            appliedAt = time_val;
+          };
+          res.add(history_outcome);
+        };
+      };
+    };
+    return Buffer.toArray(res);
+  };
+
+  public query func getActionHistory(uid : TGlobal.userId) : async ([ActionTypes.ActionOutcomeHistory]) {
+    let current_time = Time.now();
+    let time_range = 259200000000000; // 72 hrs
+    let ?user_history = Trie.find(_actionHistory, Utils.keyT(uid), Text.equal) else return [];
+    var res = Buffer.Buffer<ActionTypes.ActionOutcomeHistory>(0);
+    for ((time, outcomes) in Trie.iter(user_history)) {
+      let time_val = Utils.textToNat(time);
+      if (time_val > (current_time - time_range)) {
+        for (outcome in outcomes.vals()) {
+          let history_outcome : ActionTypes.ActionOutcomeHistory = {
+            option = outcome.option;
+            appliedAt = time_val;
+          };
+          res.add(history_outcome);
+        };
+      };
+    };
+    return Buffer.toArray(res);
+  };
+
 };

@@ -43,6 +43,7 @@ import Management "../modules/Management";
 
 import EntityTypes "../types/entity.types";
 import TGlobal "../types/global.types";
+import ActionTypes "../types/action.types";
 
 actor WorldHub {
     //stable memory
@@ -179,6 +180,13 @@ actor WorldHub {
     };
 
     public query func getUserNodeCanisterId(_uid : Text) : async (Result.Result<Text, Text>) {
+        let ?canister_id = Trie.find(_uids, Utils.keyT(_uid), Text.equal) else {
+            return #err("user not found");
+        };
+        return #ok(canister_id);
+    };
+
+    public composite query func getUserNodeCanisterIdComposite(_uid : Text) : async (Result.Result<Text, Text>) {
         let ?canister_id = Trie.find(_uids, Utils.keyT(_uid), Text.equal) else {
             return #err("user not found");
         };
@@ -602,6 +610,14 @@ actor WorldHub {
             };
         };
         _delete_cache_response := Buffer.toArray(uidToNodeIdBindingIssue);
+    };
+
+    public composite query func getActionHistoryComposite(uid : TGlobal.userId) : async ([ActionTypes.ActionOutcomeHistory]) {
+        let ?canister_id = Trie.find(_uids, Utils.keyT(uid), Text.equal) else return [];
+        let node = actor (canister_id) : actor {
+            getActionHistoryComposite : composite query (TGlobal.userId) -> async ([ActionTypes.ActionOutcomeHistory]);
+        };
+        return (await node.getActionHistoryComposite(uid));
     };
 
 };

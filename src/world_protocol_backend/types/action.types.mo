@@ -36,9 +36,8 @@ module {
         aid : Text;
     };
 
-    
     public type ActionArg = {
-        actionId : Text; 
+        actionId : Text;
         fields : [TGlobal.Field];
     };
 
@@ -52,25 +51,20 @@ module {
         assetId : Text;
         metadata : Text;
     };
-
     //ENTITY ACTION OUTCOMES TYPES
-    public type DeleteEntity = {
-    };
+    public type DeleteEntity = {};
     public type DeleteField = {
         fieldName : Text;
     };
-    
     public type RenewTimestamp = {
         fieldName : Text;
         fieldValue : { #number : Float; #formula : Text };
     };
-    
-    
+
     public type SetText = {
         fieldName : Text;
         fieldValue : Text;
     };
-
     public type AddToList = {
         fieldName : Text;
         value : Text;
@@ -84,15 +78,21 @@ module {
         fieldName : Text;
         fieldValue : { #number : Float; #formula : Text };
     };
-    
     public type DecrementNumber = {
         fieldName : Text;
         fieldValue : { #number : Float; #formula : Text };
     };
-    
     public type IncrementNumber = {
         fieldName : Text;
         fieldValue : { #number : Float; #formula : Text };
+    };
+
+    public type DecrementActionCount = {
+        value : { #number : Float; #formula : Text };
+    };
+
+    public type UpdateActionType = {
+        #decrementActionCount : DecrementActionCount;
     };
 
     public type UpdateEntityType = {
@@ -104,23 +104,38 @@ module {
         #incrementNumber : IncrementNumber;
         #addToList : AddToList;
         #removeFromList : RemoveFromList;
-        #deleteField : DeleteField
+        #deleteField : DeleteField;
     };
 
-    public type UpdateEntity  = {
+    //ENTITY ACTION OUTCOMES
+    public type UpdateEntity = {
         wid : ?TGlobal.worldId;
         eid : TGlobal.entityId;
         updates : [UpdateEntityType];
     };
 
+    public type UpdateAction = {
+        aid : TGlobal.actionId;
+        updates : [UpdateActionType];
+    };
 
     //OUTCOMES
+    public type ActionOutcomeHistory = {
+        option : {
+            #transferIcrc : TransferIcrc;
+            #mintNft : MintNft;
+            #updateEntity : UpdateEntity;
+            #updateAction : UpdateAction;
+        };
+        appliedAt : Nat;
+    };
     public type ActionOutcomeOption = {
         weight : Float;
         option : {
             #transferIcrc : TransferIcrc;
             #mintNft : MintNft;
-            #updateEntity  : UpdateEntity ;
+            #updateEntity : UpdateEntity;
+            #updateAction : UpdateAction;
         };
     };
     public type ActionOutcome = {
@@ -132,20 +147,26 @@ module {
 
     public type ActionConstraint = {
         timeConstraint : ?{
-            actionTimeInterval : ? {
+            actionTimeInterval : ?{
                 intervalDuration : Nat;
                 actionsPerInterval : Nat;
             };
+            actionStartTimestamp : ?Nat;
             actionExpirationTimestamp : ?Nat;
+            actionHistory : [{
+                #transferIcrc : TransferIcrc;
+                #mintNft : MintNft;
+                #updateEntity : UpdateEntity;
+                #updateAction : UpdateAction;
+            }];
         };
         entityConstraint : [TConstraints.EntityConstraint];
-        icpConstraint: ? TConstraints.IcpTx;
-        icrcConstraint: [TConstraints.IcrcTx];
-        nftConstraint: [TConstraints.NftTx];
+        icrcConstraint : [TConstraints.IcrcTx];
+        nftConstraint : [TConstraints.NftTx];
     };
 
-    public type SubAction =
-    {
+    //ACTIONS
+    public type SubAction = {
         actionConstraint : ?ActionConstraint;
         actionResult : ActionResult;
     };
@@ -157,8 +178,7 @@ module {
         worldAction : ?SubAction;
     };
 
-    public type ActionReturn =
-    {
+    public type ActionReturn = {
         callerPrincipalId : Text;
         targetPrincipalId : Text;
         worldPrincipalId : Text;

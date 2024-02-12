@@ -8,12 +8,17 @@ const install_code = async () => {
 	const actor = await actorWorldDeployer();
 
 	let time_stamp = await actor.updateWorldWasmModule({
-		version : "020224",
+		version : "120224",
 		wasm : wasmModule
-	}) ;
+	});
 	console.log(time_stamp);
 };
 
+// const process_json = async () => {
+// 	const json = await loadJson();
+// };
+
 (async () => {
 	await install_code();
+	// await process_json();
 })();
