@@ -56,4 +56,10 @@ actor class AssetNode() {
         };
         return image;
     };
+
+    public shared ({caller}) func deleteUser(args : { uid : Text }) : async () {
+        assert(caller == Principal.fromText(ENV.WorldHubCanisterId));
+        _images := Trie.remove(_images, Utils.keyT(args.uid), Text.equal).0;
+    };
+
 };

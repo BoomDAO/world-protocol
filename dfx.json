@@ -1,19 +1,15 @@
 {
   "canisters": {
-    "PaymentHub": {
-      "main": "src/world_protocol_backend/PaymentHub/PaymentHub.mo",
-      "type": "motoko"
-    },
-    "StakingHub": {
-      "main": "src/world_protocol_backend/StakingHub/StakingHub.mo",
-      "type": "motoko"
-    },
     "WorldHub": {
       "main": "src/world_protocol_backend/WorldHub/WorldHub.mo",
       "type": "motoko"
     },
     "UserNode": {
       "main": "src/world_protocol_backend/WorldHub/UserNode.mo",
+      "type": "motoko"
+    },
+    "AssetNode": {
+      "main": "src/world_protocol_backend/WorldHub/AssetNode.mo",
       "type": "motoko"
     }
   },

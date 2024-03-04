@@ -64,7 +64,7 @@ actor class UserNode() {
   private stable var _actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.ActionState>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
-  private stable var _actionHistory : Trie.Trie<TGlobal.userId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>> = Trie.empty(); // userId -> [((Time.now()) as text) -> Outcomes]
+  private stable var _actionHistory : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>>> = Trie.empty(); // userId -> worldId -> [((Time.now()) as text) -> Outcomes]
 
   //pre-post upgrades
   system func preupgrade() {
@@ -78,6 +78,27 @@ actor class UserNode() {
 
   // Internal functions
   //
+  private func actionHistoryPut3D_(uid : TGlobal.userId, wid : TGlobal.worldId, time : Text, history : [ActionTypes.ActionOutcomeOption]) : (Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>>>) {
+    let ?w = Trie.find(_actionHistory, Utils.keyT(uid), Text.equal) else {
+      var worldTrie : Trie.Trie<TGlobal.worldId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>> = Trie.empty();
+      worldTrie := Trie.put2D(worldTrie, Utils.keyT(wid), Text.equal, Utils.keyT(time), Text.equal, history);
+      _actionHistory := Trie.put(_actionHistory, Utils.keyT(uid), Text.equal, worldTrie).0;
+      return _actionHistory;
+    };
+
+    let ?h = Trie.find(w, Utils.keyT(wid), Text.equal) else {
+      var historyTrie : Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]> = Trie.empty();
+      historyTrie := Trie.put(historyTrie, Utils.keyT(time), Text.equal, history).0;
+      _actionHistory := Trie.put2D(_actionHistory, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, historyTrie);
+      return _actionHistory;
+    };
+
+    var historyTrie = h;
+    historyTrie := Trie.put(historyTrie, Utils.keyT(time), Text.equal, history).0;
+    _actionHistory := Trie.put2D(_actionHistory, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, historyTrie);
+    return _actionHistory;
+  };
+
   private func entityPut3D_(uid : TGlobal.userId, wid : TGlobal.worldId, eid : TGlobal.entityId, entity : EntityTypes.Entity) : (Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.entityId, EntityTypes.Entity>>>) {
     let ?w = Trie.find(_entities, Utils.keyT(uid), Text.equal) else {
       var worldTrie : Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.entityId, EntityTypes.Entity>> = Trie.empty();
@@ -108,7 +129,6 @@ actor class UserNode() {
     entityTrie := Trie.remove(entityTrie, Utils.keyT(eid), Text.equal).0;
     _entities := Trie.put2D(_entities, Utils.keyT(uid), Text.equal, Utils.keyT(wid), Text.equal, entityTrie);
     return _entities;
-
   };
 
   private func isPermitted_(worldId : Text, entityId : Text, principal : Text) : (Bool) {
@@ -384,7 +404,7 @@ actor class UserNode() {
     };
 
     // if all outcomes updated, update recent history of actionOutcomes
-    _actionHistory := Trie.put2D(_actionHistory, Utils.keyT(uid), Text.equal, Utils.keyT(Int.toText(Time.now())), Text.equal, outcomes);
+    _actionHistory := actionHistoryPut3D_(uid, wid, Int.toText(Time.now()), outcomes);
     return #ok();
   };
 
@@ -435,6 +455,46 @@ actor class UserNode() {
   //
   public query func cycleBalance() : async Nat {
     Cycles.balance();
+  };
+
+  public shared ({ caller }) func deleteActionState(uid : TGlobal.userId, wid : TGlobal.worldId, aid : TGlobal.actionId) : async (Result.Result<Text, Text>) {
+    assert (caller == Principal.fromText(wid));
+
+    switch (Trie.find(_actionStates, Utils.keyT(uid), Text.equal)) {
+      case (?worldsTrie) {
+
+        switch (Trie.find(worldsTrie, Utils.keyT(wid), Text.equal)) {
+          case (?actionStates) {
+
+            var newUserActionStates = Trie.remove(actionStates, Utils.keyT(aid), Text.equal).0;
+
+            var newWorldTrie = Trie.put(worldsTrie, Utils.keyT(wid), Text.equal, newUserActionStates).0;
+
+            _actionStates := Trie.put(_actionStates, Utils.keyT(uid), Text.equal, newWorldTrie).0;
+          };
+          case _ {
+            return #err("Action state of action id: " #aid # " of world id: " #wid # " doesn't exist for uid: " #uid);
+          };
+        };
+      };
+      case _ {
+        return #err("Uid: " #uid # " doesn't yet have any action state in wid: " #wid);
+      };
+    };
+
+    return #ok ":)";
+  };
+
+  public composite query func getAllUserActionStatesComposite(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.ActionState], Text>) {
+    var res = Buffer.Buffer<ActionTypes.ActionState>(0);
+    let ?user = Trie.find(_actionStates, Utils.keyT(uid), Text.equal) else return #err("user not found!");
+    let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else {
+      return #ok(Buffer.toArray(res));
+    };
+    for ((aid, action) in Trie.iter(w)) {
+      res.add(action);
+    };
+    return #ok(Buffer.toArray(res));
   };
 
   public query func getAllUserActionStates(uid : TGlobal.userId, wid : TGlobal.worldId) : async (Result.Result<[ActionTypes.ActionState], Text>) {
@@ -494,18 +554,72 @@ actor class UserNode() {
 
       switch (page) {
         case (?p) {
-
           let eids = Buffer.Buffer<Text>(0);
-
           for ((i, v) in Trie.iter(w)) {
             eids.add(i);
           };
-
           let page_size = 20;
           var start = p * page_size;
           var end = Nat.min(start + page_size, eids.size());
           let _eids = Buffer.toArray(eids);
+          for (i in Iter.range(start, end - 1)) {
+            switch (Trie.find(w, Utils.keyT(_eids[i]), Text.equal)) {
+              case (?entity) {
+                var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+                for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                  fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+                };
+                entities.add({
+                  eid = entity.eid;
+                  wid = entity.wid;
+                  fields = Buffer.toArray(fieldsBuffer);
+                });
+              };
+              case _ {};
+            };
+          };
 
+        };
+        case _ {
+
+          for ((eid, entity) in Trie.iter(w)) {
+            var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+            for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+              fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+            };
+            entities.add({
+              eid = entity.eid;
+              wid = entity.wid;
+              fields = Buffer.toArray(fieldsBuffer);
+            });
+          };
+
+        };
+      };
+
+    };
+
+    return #ok(Buffer.toArray(entities));
+  };
+
+  public composite query func getAllUserEntitiesOfSpecificWorldsComposite(uid : TGlobal.userId, wids : [TGlobal.worldId], page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var entities = Buffer.Buffer<EntityTypes.StableEntity>(0);
+
+    label worldLoop for (wid in Iter.fromArray(wids)) {
+
+      let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+      let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else continue worldLoop;
+
+      switch (page) {
+        case (?p) {
+          let eids = Buffer.Buffer<Text>(0);
+          for ((i, v) in Trie.iter(w)) {
+            eids.add(i);
+          };
+          let page_size = 20;
+          var start = p * page_size;
+          var end = Nat.min(start + page_size, eids.size());
+          let _eids = Buffer.toArray(eids);
           for (i in Iter.range(start, end - 1)) {
             switch (Trie.find(w, Utils.keyT(_eids[i]), Text.equal)) {
               case (?entity) {
@@ -557,7 +671,7 @@ actor class UserNode() {
         for ((i, v) in Trie.iter(w)) {
           eids.add(i);
         };
-        let page_size = 20;
+        let page_size = 40;
         var start = p * page_size;
         var end = Nat.min(start + page_size, eids.size());
         let _eids = Buffer.toArray(eids);
@@ -606,7 +720,7 @@ actor class UserNode() {
         for ((i, v) in Trie.iter(w)) {
           eids.add(i);
         };
-        let page_size = 20;
+        let page_size = 40;
         var start = p * page_size;
         var end = Nat.min(start + page_size, eids.size());
         let _eids = Buffer.toArray(eids);
@@ -666,6 +780,124 @@ actor class UserNode() {
       };
     };
     return #ok(Buffer.toArray(b));
+  };
+
+  public query func getUserEntitiesFromWorldNode(uid : TGlobal.userId, wid : TGlobal.worldId, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
+    let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+    let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else return #ok(Buffer.toArray(res));
+    let eids = Buffer.Buffer<(Text, Nat)>(0);
+
+    for ((i, v) in Trie.iter(w)) {
+      if (Utils.isValidUserPrincipal(i)) {
+        let xp = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, "xp_leaderboard"), "0.0"));
+        eids.add((i, xp));
+      };
+    };
+    eids.sort(Utils.CompareTextNatTupleDescending);
+    switch (page) {
+      case (?p) {
+        let page_size = 40;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, eids.size());
+        let _eids = Buffer.toArray(eids);
+        for (i in Iter.range(start, end - 1)) {
+          switch (Trie.find(w, Utils.keyT(_eids[i].0), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+      case _ {
+        for ((eid, xp) in eids.vals()) {
+          switch (Trie.find(w, Utils.keyT(eid), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+    };
+  };
+
+  public composite query func getUserEntitiesFromWorldNodeComposite(uid : TGlobal.userId, wid : TGlobal.worldId, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
+    let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+    let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else return #ok(Buffer.toArray(res));
+    let eids = Buffer.Buffer<(Text, Nat)>(0);
+
+    for ((i, v) in Trie.iter(w)) {
+      if (Utils.isValidUserPrincipal(i)) {
+        let xp = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, "xp_leaderboard"), "0.0"));
+        eids.add((i, xp));
+      };
+    };
+    eids.sort(Utils.CompareTextNatTupleDescending);
+    switch (page) {
+      case (?p) {
+        let page_size = 40;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, eids.size());
+        let _eids = Buffer.toArray(eids);
+        for (i in Iter.range(start, end - 1)) {
+          switch (Trie.find(w, Utils.keyT(_eids[i].0), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+      case _ {
+        for ((eid, xp) in eids.vals()) {
+          switch (Trie.find(w, Utils.keyT(eid), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+    };
   };
 
   public shared ({ caller }) func createEntity(uid : TGlobal.userId, wid : TGlobal.worldId, eid : TGlobal.entityId, fields : [TGlobal.Field]) : async (Result.Result<Text, Text>) {
@@ -848,18 +1080,20 @@ actor class UserNode() {
     return #ok("imported");
   };
 
-  public composite query func getActionHistoryComposite(uid : TGlobal.userId) : async ([ActionTypes.ActionOutcomeHistory]) {
+  private func getUserActionHistory_(uid : TGlobal.userId, wid : TGlobal.worldId) : [ActionTypes.ActionOutcomeHistory] {
     let current_time = Time.now();
     let time_range = 259200000000000; // 72 hrs
     let ?user_history = Trie.find(_actionHistory, Utils.keyT(uid), Text.equal) else return [];
+    let ?user_world_history = Trie.find(user_history, Utils.keyT(wid), Text.equal) else return [];
     var res = Buffer.Buffer<ActionTypes.ActionOutcomeHistory>(0);
-    for ((time, outcomes) in Trie.iter(user_history)) {
+    for ((time, outcomes) in Trie.iter(user_world_history)) {
       let time_val = Utils.textToNat(time);
       if (time_val > (current_time - time_range)) {
         for (outcome in outcomes.vals()) {
           let history_outcome : ActionTypes.ActionOutcomeHistory = {
             option = outcome.option;
             appliedAt = time_val;
+            wid = wid;
           };
           res.add(history_outcome);
         };
@@ -868,24 +1102,93 @@ actor class UserNode() {
     return Buffer.toArray(res);
   };
 
-  public query func getActionHistory(uid : TGlobal.userId) : async ([ActionTypes.ActionOutcomeHistory]) {
-    let current_time = Time.now();
-    let time_range = 259200000000000; // 72 hrs
-    let ?user_history = Trie.find(_actionHistory, Utils.keyT(uid), Text.equal) else return [];
+  public composite query func getUserActionHistoryComposite(uid : TGlobal.userId, wid : TGlobal.worldId) : async ([ActionTypes.ActionOutcomeHistory]) {
+    return getUserActionHistory_(uid, wid);
+  };
+
+  public query func getUserActionHistory(uid : TGlobal.userId, wid : TGlobal.worldId) : async ([ActionTypes.ActionOutcomeHistory]) {
+    return getUserActionHistory_(uid, wid);
+  };
+
+  public query func getAllUserActionHistoryOfSpecificWorlds(uid : TGlobal.userId, wids : [TGlobal.worldId], page : ?Nat) : async ([ActionTypes.ActionOutcomeHistory]) {
     var res = Buffer.Buffer<ActionTypes.ActionOutcomeHistory>(0);
-    for ((time, outcomes) in Trie.iter(user_history)) {
-      let time_val = Utils.textToNat(time);
-      if (time_val > (current_time - time_range)) {
-        for (outcome in outcomes.vals()) {
-          let history_outcome : ActionTypes.ActionOutcomeHistory = {
-            option = outcome.option;
-            appliedAt = time_val;
-          };
-          res.add(history_outcome);
+    for (wid in wids.vals()) {
+      let history_of_current_world = getUserActionHistory_(uid, wid);
+      for (i in history_of_current_world.vals()) {
+        res.add(i);
+      };
+    };
+    switch (page) {
+      case (?p) {
+        let page_size = 20;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, res.size());
+        let _histories = Buffer.toArray(res);
+        res := Buffer.fromArray([]);
+        for (i in Iter.range(start, end - 1)) {
+          res.add(_histories[i]);
+        };
+        return Buffer.toArray(res);
+      };
+      case _ {
+        return Buffer.toArray(res);
+      };
+    };
+  };
+
+  public composite query func getAllUserActionHistoryOfSpecificWorldsComposite(uid : TGlobal.userId, wids : [TGlobal.worldId], page : ?Nat) : async ([ActionTypes.ActionOutcomeHistory]) {
+    var res = Buffer.Buffer<ActionTypes.ActionOutcomeHistory>(0);
+    for (wid in wids.vals()) {
+      for (wid in wids.vals()) {
+        let history_of_current_world = getUserActionHistory_(uid, wid);
+        for (i in history_of_current_world.vals()) {
+          res.add(i);
         };
       };
     };
-    return Buffer.toArray(res);
+    switch (page) {
+      case (?p) {
+        let page_size = 20;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, res.size());
+        let _histories = Buffer.toArray(res);
+        res := Buffer.fromArray([]);
+        for (i in Iter.range(start, end - 1)) {
+          res.add(_histories[i]);
+        };
+        return Buffer.toArray(res);
+      };
+      case _ {
+        return Buffer.toArray(res);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteActionHistoryForUser(args : { uid : TGlobal.userId }) : async () {
+    let ?user_worlds_history = Trie.find(_actionHistory, Utils.keyT(args.uid), Text.equal) else {
+      return ();
+    };
+    var mutable_user_worlds_history = user_worlds_history;
+    mutable_user_worlds_history := Trie.remove(mutable_user_worlds_history, Utils.keyT(Principal.toText(caller)), Text.equal).0;
+    _actionHistory := Trie.put(_actionHistory, Utils.keyT(args.uid), Text.equal, mutable_user_worlds_history).0;
+    return ();
+  };
+
+  public shared ({ caller }) func deleteUser(args : { uid : TGlobal.userId }) : async () {
+    let worldId = Principal.toText(caller);
+    _actionHistory := Trie.put2D(_actionHistory, Utils.keyT(args.uid), Text.equal, Utils.keyT(worldId), Text.equal, Trie.empty());
+    _actionStates := Trie.put2D(_actionStates, Utils.keyT(args.uid), Text.equal, Utils.keyT(worldId), Text.equal, Trie.empty());
+    _entities := Trie.put2D(_entities, Utils.keyT(args.uid), Text.equal, Utils.keyT(worldId), Text.equal, Trie.empty());
+    let worldHub = actor (ENV.WorldHubCanisterId) : actor {
+      deleteUser : shared ({ uid : TGlobal.userId }) -> async ();
+    };
+    await worldHub.deleteUser(args);
+  };
+
+  public shared ({ caller }) func deleteUserEntityFromWorldNode(args : { uid : Text }) : async () {
+    let worldId = Principal.toText(caller);
+    ignore entityRemove3D_(worldId, worldId, args.uid);
+    return ();
   };
 
 };

@@ -1,10 +1,12 @@
 {
   "WorldHub": {
     "ic": "j362g-ziaaa-aaaap-abf6a-cai",
-    "stag": "fgpem-ziaaa-aaaag-abi2q-cai"
+    "stag": "c5moj-piaaa-aaaal-qdhoq-cai"
   },
   "UserNode": {
-    "stag": "kjlui-paaaa-aaaag-acgsa-cai",
-    "guilds": "ooocm-sqaaa-aaaag-acbuq-cai"
+    "stag": "t3opa-giaaa-aaaal-qdijq-cai"
+  },
+  "AssetNode": {
+    "stag": "hpvze-7qaaa-aaaal-qdhqa-cai"
   }
 }

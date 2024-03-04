@@ -29,6 +29,10 @@ import Text "mo:base/Text";
 import Time "mo:base/Time";
 import Trie "mo:base/Trie";
 import Trie2D "mo:base/Trie";
+import Order "mo:base/Order";
+
+import Base32 "Base32";
+import CRC32 "CRC32";
 
 module {
     //util types
@@ -95,8 +99,8 @@ module {
             };
         };
 
-        if(Text.contains(t, #char '-')) return -f;
-        
+        if (Text.contains(t, #char '-')) return -f;
+
         return f;
     };
 
@@ -106,20 +110,49 @@ module {
         return array;
     };
 
-    public func isResultError<R,E>(result : Result.Result<R,E>) : (Bool){
-        switch(result){
-            case(#err(msg)){
+    public func isResultError<R, E>(result : Result.Result<R, E>) : (Bool) {
+        switch (result) {
+            case (#err(msg)) {
                 return true;
             };
-            case(#ok(msg)){
+            case (#ok(msg)) {
                 return false;
             };
         };
     };
     public func intToNat(value : Int) : (Nat) {
-        if(value < 0) {
+        if (value < 0) {
             return 0;
         };
         return textToNat(Int.toText(value));
-    }
+    };
+
+    public func floatTextToNat(t : Text) : (Nat) {
+        let float = textToFloat(t);
+        return intToNat(Float.toInt(float));
+    };
+
+    let CRC_LENGTH_IN_BYTES : Nat = 4;
+    let CANISTER_ID_HASH_LEN_IN_BYTES : Nat = 10;
+    let HASH_LEN_IN_BYTES : Nat = 28;
+    let MAX_LENGTH_IN_BYTES : Nat = 29; //HASH_LEN_IN_BYTES + 1; // 29
+    let TYPE_SELF_AUTH : Nat8 = 0x02;
+
+    public func isValidUserPrincipal(text : Text) : Bool {
+        if (text.size() != 63) return false;
+        for (i in Text.toIter(text)) {
+            if (i == '-' or Char.isLowercase(i) or Char.isDigit(i)) {} else return false;
+        };
+        return true;
+    };
+
+    public func CompareTextNatTupleDescending(x : (Text, Nat), y : (Text, Nat)) : Order.Order {
+        if (y.1 < x.1) {
+            #less;
+        } else if (y.1 > x.1) {
+            #greater;
+        } else {
+            #equal;
+        };
+    };
 };
