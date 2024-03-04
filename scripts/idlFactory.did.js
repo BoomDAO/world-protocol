@@ -4,22 +4,21 @@ export const idlFactory = ({ IDL }) => {
     'cover' : IDL.Text,
     'canister' : IDL.Text,
   });
-  const headerField = IDL.Tuple(IDL.Text, IDL.Text);
+  const HeaderField = IDL.Tuple(IDL.Text, IDL.Text);
   const HttpRequest = IDL.Record({
     'url' : IDL.Text,
     'method' : IDL.Text,
     'body' : IDL.Vec(IDL.Nat8),
-    'headers' : IDL.Vec(headerField),
+    'headers' : IDL.Vec(HeaderField),
   });
   const HttpResponse = IDL.Record({
     'body' : IDL.Vec(IDL.Nat8),
-    'headers' : IDL.Vec(headerField),
+    'headers' : IDL.Vec(HeaderField),
     'status_code' : IDL.Nat16,
   });
   const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   return IDL.Service({
     'addAdmin' : IDL.Func([IDL.Text], [], []),
-    'addController' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'createWorldCanister' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
     'cycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
     'getAllAdmins' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
@@ -28,7 +27,6 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
         ['query'],
       ),
-    'getLatestWorldWasmVersion' : IDL.Func([], [IDL.Text], ['query']),
     'getOwner' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
     'getTotalWorlds' : IDL.Func([], [IDL.Nat], ['query']),
     'getUserTotalWorlds' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
@@ -39,20 +37,21 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getWorldCover' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
     'getWorldDetails' : IDL.Func([IDL.Text], [IDL.Opt(World)], ['query']),
-    'getWorldVersion' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
+    'getWorldWasmVersion' : IDL.Func([], [IDL.Text], ['query']),
     'getWorlds' : IDL.Func([IDL.Nat], [IDL.Vec(World)], ['query']),
     'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
     'removeAdmin' : IDL.Func([IDL.Text], [], []),
-    'removeController' : IDL.Func([IDL.Text, IDL.Text], [], []),
     'updateWorldCover' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
-    'upgradeWorldToNewWasm' : IDL.Func(
-        [IDL.Text, IDL.Vec(IDL.Nat8)],
-        [Result],
+    'updateWorldName' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
+    'updateWorldWasmModule' : IDL.Func(
+        [IDL.Record({ 'wasm' : IDL.Vec(IDL.Nat8), 'version' : IDL.Text })],
+        [IDL.Int],
         [],
       ),
-    'uploadNewWasmModule' : IDL.Func(
-        [IDL.Record({ 'wasmModule' : IDL.Vec(IDL.Nat8) })],
-        [Result],
+    'upgrade_worlds' : IDL.Func([IDL.Int], [], []),
+    'validate_upgrade_worlds' : IDL.Func(
+        [IDL.Int],
+        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
         [],
       ),
   });
