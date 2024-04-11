@@ -900,6 +900,72 @@ actor class UserNode() {
     };
   };
 
+  public composite query func getUserEntitiesFromWorldNodeFilteredSortingComposite(uid : TGlobal.userId, wid : TGlobal.worldId, fieldName : Text, order : { #Ascending; #Descending; }, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+    var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
+    let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
+    let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else return #ok(Buffer.toArray(res));
+    let eids = Buffer.Buffer<(Text, Nat)>(0);
+
+    for ((i, v) in Trie.iter(w)) {
+      if (Utils.isValidUserPrincipal(i)) {
+        let fieldValue = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, fieldName), "0.0"));
+        eids.add((i, fieldValue));
+      };
+    };
+    switch (order) {
+      case (#Ascending) {
+        eids.sort(Utils.CompareTextNatTupleAscending);
+      };
+      case (#Descending) {
+        eids.sort(Utils.CompareTextNatTupleDescending);
+      };
+    };
+    switch (page) {
+      case (?p) {
+        let page_size = 40;
+        var start = p * page_size;
+        var end = Nat.min(start + page_size, eids.size());
+        let _eids = Buffer.toArray(eids);
+        for (i in Iter.range(start, end - 1)) {
+          switch (Trie.find(w, Utils.keyT(_eids[i].0), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+      case _ {
+        for ((eid, xp) in eids.vals()) {
+          switch (Trie.find(w, Utils.keyT(eid), Text.equal)) {
+            case (?entity) {
+              var fieldsBuffer = Buffer.Buffer<TGlobal.Field>(0);
+              for (f in Iter.fromArray(Map.toArray(entity.fields))) {
+                fieldsBuffer.add({ fieldName = f.0; fieldValue = f.1 });
+              };
+              res.add({
+                eid = entity.eid;
+                wid = entity.wid;
+                fields = Buffer.toArray(fieldsBuffer);
+              });
+            };
+            case _ {};
+          };
+        };
+        return #ok(Buffer.toArray(res));
+      };
+    };
+  };
+
   public shared ({ caller }) func createEntity(uid : TGlobal.userId, wid : TGlobal.worldId, eid : TGlobal.entityId, fields : [TGlobal.Field]) : async (Result.Result<Text, Text>) {
     assert (caller == Principal.fromText(wid));
     var fieldsMap = Map.new<Text, Text>();
@@ -912,6 +978,23 @@ actor class UserNode() {
       fields = fieldsMap;
     };
     _entities := entityPut3D_(uid, wid, eid, newEntity);
+    return #ok ":)";
+  };
+
+  public shared ({ caller }) func createEntityForAllUsers(wid : TGlobal.worldId, eid : TGlobal.entityId, fields : [TGlobal.Field]) : async (Result.Result<Text, Text>) {
+    assert (caller == Principal.fromText(wid));
+    var fieldsMap = Map.new<Text, Text>();
+    for (field in Iter.fromArray(fields)) {
+      ignore Map.put(fieldsMap, thash, field.fieldName, field.fieldValue);
+    };
+    let newEntity = {
+      wid = wid;
+      eid = eid;
+      fields = fieldsMap;
+    };
+    for((uid, _) in Trie.iter(_entities)) {
+      _entities := entityPut3D_(uid, wid, eid, newEntity);
+    };
     return #ok ":)";
   };
 
