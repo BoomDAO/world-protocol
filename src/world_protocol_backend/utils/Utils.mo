@@ -155,4 +155,14 @@ module {
             #equal;
         };
     };
+
+    public func CompareTextNatTupleAscending(x : (Text, Nat), y : (Text, Nat)) : Order.Order {
+        if (y.1 > x.1) {
+            #less;
+        } else if (y.1 < x.1) {
+            #greater;
+        } else {
+            #equal;
+        };
+    };
 };
