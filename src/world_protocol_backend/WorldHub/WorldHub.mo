@@ -200,6 +200,10 @@ actor WorldHub {
         return _nodes;
     };
 
+    public query func getAllWorldNodeIds() : async [Text] {
+        return _worldNodes;
+    };
+
     public query func getAllAssetNodeIds() : async [Text] {
         return _assetNodes;
     };
@@ -614,6 +618,19 @@ actor WorldHub {
     public shared ({ caller }) func upgrade_usernodes(last_verified_update : Int) : async () {
         assert (caller == Principal.fromText("xomae-vyaaa-aaaaq-aabhq-cai")); //Only SNS governance canister can call generic methods via proposal
         for (node in _nodes.vals()) {
+            let IC : Management.Management = actor (ENV.IC_Management);
+            let upgrade_bool = ?{
+                skip_pre_upgrade = ?false;
+            };
+            await IC.install_code({
+                arg = Blob.fromArray([]);
+                wasm_module = usernode_wasm_module.wasm;
+                mode = #upgrade upgrade_bool;
+                canister_id = Principal.fromText(node);
+                sender_canister_version = null;
+            });
+        };
+        for (node in _worldNodes.vals()) {
             let IC : Management.Management = actor (ENV.IC_Management);
             let upgrade_bool = ?{
                 skip_pre_upgrade = ?false;
