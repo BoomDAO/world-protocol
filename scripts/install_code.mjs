@@ -7,9 +7,9 @@ const install_code = async () => {
 	const wasmModule = await loadWasm();
 	const actor = await actorWorldDeployer();
 
-	let x = await actor.updateWorldWasmModule({
+	let x = await actor.updateUserNodeWasmModule({
 		wasm : wasmModule,
-		version : "110424"
+		version : "180424"
 	});
 	console.log(x);
 };

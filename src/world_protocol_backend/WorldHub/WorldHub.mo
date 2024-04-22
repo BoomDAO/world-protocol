@@ -49,7 +49,7 @@ actor WorldHub {
     //stable memory
     private stable var _uids : Trie.Trie<TGlobal.userId, TGlobal.nodeId> = Trie.empty(); //mapping user_id -> node_canister_id
     private stable var _usernames : Trie.Trie<Text, TGlobal.userId> = Trie.empty(); //mapping username -> _uid
-    private stable var _assetInfo : Trie.Trie<Text, Text> = Trie.empty(); // mapping user_id -> assertNode_canister_id
+    private stable var _assetInfo : Trie.Trie<Text, Text> = Trie.empty(); // mapping user_id -> assetNode_canister_id
     private stable var _nodes : [TGlobal.nodeId] = []; //all user db canisters as nodes
     private stable var _worldNodes : [TGlobal.nodeId] = [];
     private stable var _assetNodes : [TGlobal.nodeId] = []; // all asset node ids for users
@@ -308,7 +308,7 @@ actor WorldHub {
         _admins := Buffer.toArray(b);
     };
 
-    public shared ({ caller }) func createNewUser(args : { user : Principal; requireEntireNode : Bool; }) : async (Result.Result<Text, Text>) {
+    public shared ({ caller }) func createNewUser(args : { user : Principal; requireEntireNode : Bool }) : async (Result.Result<Text, Text>) {
         var _uid : Text = Principal.toText(args.user);
         switch (await getUserNodeCanisterId(_uid)) {
             case (#ok o) {
@@ -351,13 +351,13 @@ actor WorldHub {
         };
     };
 
-    public shared ({caller}) func deleteUser(args : { uid : TGlobal.userId }) : async () {
+    public shared ({ caller }) func deleteUser(args : { uid : TGlobal.userId }) : async () {
         switch (await getUserNodeCanisterId(args.uid)) {
             case (#ok(nodeId)) {
-                assert(caller == Principal.fromText(nodeId));
+                assert (caller == Principal.fromText(nodeId));
                 // delete username
-                for((i, v) in Trie.iter(_usernames)) {
-                    if(v == args.uid) {
+                for ((i, v) in Trie.iter(_usernames)) {
+                    if (v == args.uid) {
                         _usernames := Trie.remove(_usernames, Utils.keyT(i), Text.equal).0;
                     };
                 };
@@ -365,7 +365,7 @@ actor WorldHub {
                 switch (Trie.find(_assetInfo, Utils.keyT(args.uid), Text.equal)) {
                     case (?assetNodeId) {
                         let assetCanister = actor (assetNodeId) : actor {
-                            deleteUser : shared ({ uid : TGlobal.userId }) -> async (); 
+                            deleteUser : shared ({ uid : TGlobal.userId }) -> async ();
                         };
                         await assetCanister.deleteUser(args);
                     };
@@ -683,6 +683,22 @@ actor WorldHub {
             getUserActionHistory : shared (TGlobal.userId, TGlobal.worldId) -> async ([ActionTypes.ActionOutcomeHistory]);
         };
         return (await node.getUserActionHistory(uid, wid));
+    };
+
+    public shared ({ caller }) func deleteUsersProfile(comma_separated_uids : Text) : async ([Text]) {
+        assert (caller == Principal.fromText("2ot7t-idkzt-murdg-in2md-bmj2w-urej7-ft6wa-i4bd3-zglmv-pf42b-zqe"));
+        var b = Buffer.Buffer<Text>(0);
+        let uids = Iter.toArray(Text.tokens(comma_separated_uids, #text(",")));
+        for (uid in uids.vals()) {
+            for ((i, v) in Trie.iter(_usernames)) {
+                if (v == uid) {
+                    _usernames := Trie.remove(_usernames, Utils.keyT(i), Text.equal).0; // remove username
+                };
+            };
+            _assetInfo := Trie.remove(_assetInfo, Utils.keyT(uid), Text.equal).0; // remove profile picture reference
+            b.add(uid);
+        };
+        return Buffer.toArray(b);
     };
 
 };

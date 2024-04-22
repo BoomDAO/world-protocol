@@ -64,7 +64,9 @@ actor class UserNode() {
   private stable var _actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, ActionTypes.ActionState>>> = Trie.empty();
   private stable var _permissions : Trie.Trie<Text, Trie.Trie<Text, EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
   private stable var _globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
-  private stable var _actionHistory : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>>> = Trie.empty(); // userId -> worldId -> [((Time.now()) as text) -> Outcomes]
+  private stable var _actionHistory : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<Text, [ActionTypes.ActionOutcomeOption]>>> = Trie.empty(); // userId -> worldId -> [historyCounter -> Outcomes]
+  private stable var _historyCounterTimestamp : Trie.Trie<Text, Text> = Trie.empty();
+  private stable var _historyCounter : Nat = 0;
 
   //pre-post upgrades
   system func preupgrade() {
@@ -404,7 +406,9 @@ actor class UserNode() {
     };
 
     // if all outcomes updated, update recent history of actionOutcomes
-    _actionHistory := actionHistoryPut3D_(uid, wid, Int.toText(Time.now()), outcomes);
+    _historyCounter := _historyCounter + 1;
+    _actionHistory := actionHistoryPut3D_(uid, wid, Nat.toText(_historyCounter), outcomes);
+    _historyCounterTimestamp := Trie.put(_historyCounterTimestamp, Utils.keyT(Nat.toText(_historyCounter)), Text.equal, Int.toText(Time.now())).0;
     return #ok();
   };
 
@@ -1169,7 +1173,8 @@ actor class UserNode() {
     let ?user_history = Trie.find(_actionHistory, Utils.keyT(uid), Text.equal) else return [];
     let ?user_world_history = Trie.find(user_history, Utils.keyT(wid), Text.equal) else return [];
     var res = Buffer.Buffer<ActionTypes.ActionOutcomeHistory>(0);
-    for ((time, outcomes) in Trie.iter(user_world_history)) {
+    for ((historyCounter, outcomes) in Trie.iter(user_world_history)) {
+      let time = Option.get(Trie.find(_historyCounterTimestamp, Utils.keyT(historyCounter), Text.equal), historyCounter);
       let time_val = Utils.textToNat(time);
       if (time_val > (current_time - time_range)) {
         for (outcome in outcomes.vals()) {
@@ -1183,6 +1188,10 @@ actor class UserNode() {
       };
     };
     return Buffer.toArray(res);
+  };
+
+  public query func getHistoryCounter() : async (Nat) {
+    _historyCounter;
   };
 
   public composite query func getUserActionHistoryComposite(uid : TGlobal.userId, wid : TGlobal.worldId) : async ([ActionTypes.ActionOutcomeHistory]) {
