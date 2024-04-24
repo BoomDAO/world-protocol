@@ -140,6 +140,18 @@ actor WorldHub {
 
     //Queries
     //
+    public composite query func checkIfUserProfileExist(_uid : Text) : async Bool {
+        let ?assetNodeId = Trie.find(_assetInfo, Utils.keyT(_uid), Text.equal) else {
+            return false;
+        };
+        for ((name, uid) in Trie.iter(_usernames)) {
+            if (_uid == uid) {
+                return true;
+            };
+        };
+        return false;
+    };
+
     public composite query func getUserProfile(arg : { uid : Text }) : async ({
         uid : Text;
         username : Text;

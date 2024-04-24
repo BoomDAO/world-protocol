@@ -904,7 +904,7 @@ actor class UserNode() {
     };
   };
 
-  public composite query func getUserEntitiesFromWorldNodeFilteredSortingComposite(uid : TGlobal.userId, wid : TGlobal.worldId, fieldName : Text, order : { #Ascending; #Descending; }, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
+  public composite query func getUserEntitiesFromWorldNodeFilteredSortingComposite(uid : TGlobal.userId, wid : TGlobal.worldId, fieldName : Text, order : { #Ascending; #Descending }, page : ?Nat) : async (Result.Result<[EntityTypes.StableEntity], Text>) {
     var res = Buffer.Buffer<EntityTypes.StableEntity>(0);
     let ?user = Trie.find(_entities, Utils.keyT(uid), Text.equal) else return #err("user not found");
     let ?w = Trie.find(user, Utils.keyT(wid), Text.equal) else return #ok(Buffer.toArray(res));
@@ -912,8 +912,13 @@ actor class UserNode() {
 
     for ((i, v) in Trie.iter(w)) {
       if (Utils.isValidUserPrincipal(i)) {
-        let fieldValue = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, fieldName), "0.0"));
-        eids.add((i, fieldValue));
+        let worldHub = actor (ENV.WorldHubCanisterId) : actor {
+          checkIfUserProfileExist : composite query (Text) -> async (Bool);
+        };
+        if (await worldHub.checkIfUserProfileExist(i)) {
+          let fieldValue = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, fieldName), "0.0"));
+          eids.add((i, fieldValue));
+        };
       };
     };
     switch (order) {
@@ -996,7 +1001,7 @@ actor class UserNode() {
       eid = eid;
       fields = fieldsMap;
     };
-    for((uid, _) in Trie.iter(_entities)) {
+    for ((uid, _) in Trie.iter(_entities)) {
       _entities := entityPut3D_(uid, wid, eid, newEntity);
     };
     return #ok ":)";

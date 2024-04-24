@@ -9,7 +9,7 @@ const install_code = async () => {
 
 	let x = await actor.updateUserNodeWasmModule({
 		wasm : wasmModule,
-		version : "180424"
+		version : "240424"
 	});
 	console.log(x);
 };
