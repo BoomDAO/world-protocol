@@ -912,13 +912,8 @@ actor class UserNode() {
 
     for ((i, v) in Trie.iter(w)) {
       if (Utils.isValidUserPrincipal(i)) {
-        let worldHub = actor (ENV.WorldHubCanisterId) : actor {
-          checkIfUserProfileExist : composite query (Text) -> async (Bool);
-        };
-        if (await worldHub.checkIfUserProfileExist(i)) {
           let fieldValue = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, fieldName), "0.0"));
           eids.add((i, fieldValue));
-        };
       };
     };
     switch (order) {
@@ -1286,6 +1281,10 @@ actor class UserNode() {
     let worldId = Principal.toText(caller);
     ignore entityRemove3D_(worldId, worldId, args.uid);
     return ();
+  };
+
+  public query func checkUserNodeWasmVersion() : async (Text) {
+    return "25042024";
   };
 
 };
