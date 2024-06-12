@@ -1,22 +1,22 @@
 #!/usr/bin/env node
 import { actorWorldDeployer } from './actor.mjs';
-import { loadWasm } from './code.utils.mjs';
+import { loadWasm, loadJson } from './code.utils.mjs';
 import { writeFile } from 'node:fs/promises';
 
 const install_code = async () => {
 	const wasmModule = await loadWasm();
 	const actor = await actorWorldDeployer();
 
-	let x = await actor.updateUserNodeWasmModule({
+	let x = await actor.updateWorldWasmModule({
 		wasm : wasmModule,
-		version : "250424"
+		version : "100624"
 	});
 	console.log(x);
 };
 
-// const process_json = async () => {
-// 	const json = await loadJson();
-// };
+const process_json = async () => {
+	const json = await loadJson();
+};
 
 (async () => {
 	await install_code();

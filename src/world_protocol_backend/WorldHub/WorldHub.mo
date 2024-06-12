@@ -49,6 +49,8 @@ actor WorldHub {
     //stable memory
     private stable var _uids : Trie.Trie<TGlobal.userId, TGlobal.nodeId> = Trie.empty(); //mapping user_id -> node_canister_id
     private stable var _usernames : Trie.Trie<Text, TGlobal.userId> = Trie.empty(); //mapping username -> _uid
+    private stable var _twitters : Trie.Trie<Text, (Text, Text)> = Trie.empty(); // mapping twitter_user_id -> (uid, twitter_username)
+    private stable var _discords : Trie.Trie<Text, Text> = Trie.empty(); // mapping discord username -> uid
     private stable var _assetInfo : Trie.Trie<Text, Text> = Trie.empty(); // mapping user_id -> assetNode_canister_id
     private stable var _nodes : [TGlobal.nodeId] = []; //all user db canisters as nodes
     private stable var _worldNodes : [TGlobal.nodeId] = [];
@@ -711,6 +713,78 @@ actor WorldHub {
             b.add(uid);
         };
         return Buffer.toArray(b);
+    };
+
+    // Twitter/Discord Endpoints
+    public shared ({caller}) func setTwitterDetails(_uid : Text, _tid : Text, _tname : Text) : async (Result.Result<Text, Text>) {
+        assert(caller == Principal.fromText(ENV.VerifierCanisterId));
+        switch(Trie.find(_twitters, Utils.keyT(_tid), Text.equal)) {
+            case (?found) {
+                return #err("This twitter account has been authenticated by someone else already!");
+            };
+            case _ {
+                for((i, v) in Trie.iter(_twitters)) {
+                    if(v.0 == _uid) {
+                        _twitters := Trie.remove(_twitters, Utils.keyT(i), Text.equal).0;
+                        _twitters := Trie.put(_twitters, Utils.keyT(_tid), Text.equal, (_uid, _tname)).0;
+                        return #ok("Twitter account updated!");
+                    };
+                };
+                _twitters := Trie.put(_twitters, Utils.keyT(_tid), Text.equal, (_uid, _tname)).0;
+                return #ok("Twitter account added!");
+            };
+        };
+    };
+
+    public shared ({caller}) func setDiscordDetails(_uid : Text, _did : Text) : async (Result.Result<Text, Text>) {
+        assert(caller == Principal.fromText(ENV.VerifierCanisterId));
+        switch(Trie.find(_discords, Utils.keyT(_did), Text.equal)) {
+            case (?found) {
+                return #err("This discord account has been authenticated by someone else already!");
+            };
+            case _ {
+                for((i, v) in Trie.iter(_discords)) {
+                    if(v == _uid) {
+                        _discords := Trie.remove(_discords, Utils.keyT(i), Text.equal).0;
+                        _discords := Trie.put(_discords, Utils.keyT(_did), Text.equal, _uid).0;
+                        return #ok("Discord account updated!");
+                    };
+                };
+                _discords := Trie.put(_discords, Utils.keyT(_did), Text.equal, _uid).0;
+                return #ok("Discord account added!");
+            };
+        };
+    };
+
+    public query func getUserTwitterDetails(_uid : Text) : async (Text, Text) {
+        for((i, v) in Trie.iter(_twitters)) {
+            if(v.0 == _uid) {
+                return (i, v.1);
+            };
+        };
+        return ("", "");
+    };
+
+    public query func getUserDiscordDetails(_uid : Text) : async (Text) {
+        for((i, v) in Trie.iter(_discords)) {
+            if(v == _uid) {
+                return i;
+            };
+        };
+        return "";
+    };
+
+    public query func getUidFromDiscord(dname : Text) : async (Text) {
+        let ?uid = Trie.find(_discords, Utils.keyT(dname), Text.equal) else return "";
+        return uid;
+    };
+
+    public query func getTotalTwitterAccountsAuthenticated() : async Nat {
+        return Trie.size(_twitters);
+    };
+
+    public query func getTotalDiscordAccountsAuthenticated() : async Nat {
+        return Trie.size(_discords);
     };
 
 };

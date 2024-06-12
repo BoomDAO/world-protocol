@@ -36,7 +36,9 @@ module {
 
     // For Production
     public let WorldHubCanisterId = "j362g-ziaaa-aaaap-abf6a-cai";
+    public let VerifierCanisterId = "jvcsg-6aaaa-aaaan-qeqvq-cai";
 
     // For Staging
     // public let WorldHubCanisterId = "c5moj-piaaa-aaaal-qdhoq-cai";
+    // public let VerifierCanisterId = "yv22q-myaaa-aaaal-adeuq-cai";
 };
