@@ -716,15 +716,15 @@ actor WorldHub {
     };
 
     // Twitter/Discord Endpoints
-    public shared ({caller}) func setTwitterDetails(_uid : Text, _tid : Text, _tname : Text) : async (Result.Result<Text, Text>) {
-        assert(caller == Principal.fromText(ENV.VerifierCanisterId));
-        switch(Trie.find(_twitters, Utils.keyT(_tid), Text.equal)) {
+    public shared ({ caller }) func setTwitterDetails(_uid : Text, _tid : Text, _tname : Text) : async (Result.Result<Text, Text>) {
+        assert (caller == Principal.fromText(ENV.VerifierCanisterId));
+        switch (Trie.find(_twitters, Utils.keyT(_tid), Text.equal)) {
             case (?found) {
                 return #err("This twitter account has been authenticated by someone else already!");
             };
             case _ {
-                for((i, v) in Trie.iter(_twitters)) {
-                    if(v.0 == _uid) {
+                for ((i, v) in Trie.iter(_twitters)) {
+                    if (v.0 == _uid) {
                         _twitters := Trie.remove(_twitters, Utils.keyT(i), Text.equal).0;
                         _twitters := Trie.put(_twitters, Utils.keyT(_tid), Text.equal, (_uid, _tname)).0;
                         return #ok("Twitter account updated!");
@@ -736,15 +736,15 @@ actor WorldHub {
         };
     };
 
-    public shared ({caller}) func setDiscordDetails(_uid : Text, _did : Text) : async (Result.Result<Text, Text>) {
-        assert(caller == Principal.fromText(ENV.VerifierCanisterId));
-        switch(Trie.find(_discords, Utils.keyT(_did), Text.equal)) {
+    public shared ({ caller }) func setDiscordDetails(_uid : Text, _did : Text) : async (Result.Result<Text, Text>) {
+        assert (caller == Principal.fromText(ENV.VerifierCanisterId));
+        switch (Trie.find(_discords, Utils.keyT(_did), Text.equal)) {
             case (?found) {
                 return #err("This discord account has been authenticated by someone else already!");
             };
             case _ {
-                for((i, v) in Trie.iter(_discords)) {
-                    if(v == _uid) {
+                for ((i, v) in Trie.iter(_discords)) {
+                    if (v == _uid) {
                         _discords := Trie.remove(_discords, Utils.keyT(i), Text.equal).0;
                         _discords := Trie.put(_discords, Utils.keyT(_did), Text.equal, _uid).0;
                         return #ok("Discord account updated!");
@@ -757,8 +757,8 @@ actor WorldHub {
     };
 
     public query func getUserTwitterDetails(_uid : Text) : async (Text, Text) {
-        for((i, v) in Trie.iter(_twitters)) {
-            if(v.0 == _uid) {
+        for ((i, v) in Trie.iter(_twitters)) {
+            if (v.0 == _uid) {
                 return (i, v.1);
             };
         };
@@ -766,8 +766,8 @@ actor WorldHub {
     };
 
     public query func getUserDiscordDetails(_uid : Text) : async (Text) {
-        for((i, v) in Trie.iter(_discords)) {
-            if(v == _uid) {
+        for ((i, v) in Trie.iter(_discords)) {
+            if (v == _uid) {
                 return i;
             };
         };
@@ -785,6 +785,37 @@ actor WorldHub {
 
     public query func getTotalDiscordAccountsAuthenticated() : async Nat {
         return Trie.size(_discords);
+    };
+
+    // NFID <-> ICRC-28 implementation for trusted origins
+    private stable var trusted_origins : [Text] = [];
+
+    public shared ({ caller }) func get_trusted_origins() : async ([Text]) {
+        return trusted_origins;
+    };
+
+    public shared ({ caller }) func icrc28_trusted_origins() : async ({
+        trusted_origins : [Text];
+    }) {
+        return {
+            trusted_origins = trusted_origins;
+        };
+    };
+
+    public shared ({ caller }) func addTrustedOrigins(args : { originUrl : Text }) : async () {
+        var b : Buffer.Buffer<Text> = Buffer.fromArray(trusted_origins);
+        b.add(args.originUrl);
+        trusted_origins := Buffer.toArray(b);
+    };
+
+    public shared ({ caller }) func removeTrustedOrigins(args : { originUrl : Text }) : async () {
+        var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
+        for (i in trusted_origins.vals()) {
+            if (args.originUrl != i) {
+                b.add(i);
+            };
+        };
+        trusted_origins := Buffer.toArray(b);
     };
 
 };

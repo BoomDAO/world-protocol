@@ -912,8 +912,8 @@ actor class UserNode() {
 
     for ((i, v) in Trie.iter(w)) {
       if (Utils.isValidUserPrincipal(i)) {
-          let fieldValue = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, fieldName), "0.0"));
-          eids.add((i, fieldValue));
+        let fieldValue = Utils.floatTextToNat(Option.get(Map.get(v.fields, thash, fieldName), "0.0"));
+        eids.add((i, fieldValue));
       };
     };
     switch (order) {
@@ -1283,8 +1283,35 @@ actor class UserNode() {
     return ();
   };
 
-  public query func checkUserNodeWasmVersion() : async (Text) {
-    return "25042024";
+  // NFID <-> ICRC-28 implementation for trusted origins
+  private stable var trusted_origins : [Text] = [];
+
+  public shared ({ caller }) func get_trusted_origins() : async ([Text]) {
+    return trusted_origins;
+  };
+
+  public shared ({ caller }) func icrc28_trusted_origins() : async ({
+    trusted_origins : [Text];
+  }) {
+    return {
+      trusted_origins = trusted_origins;
+    };
+  };
+
+  public shared ({ caller }) func addTrustedOrigins(args : { originUrl : Text }) : async () {
+    var b : Buffer.Buffer<Text> = Buffer.fromArray(trusted_origins);
+    b.add(args.originUrl);
+    trusted_origins := Buffer.toArray(b);
+  };
+
+  public shared ({ caller }) func removeTrustedOrigins(args : { originUrl : Text }) : async () {
+    var b : Buffer.Buffer<Text> = Buffer.Buffer<Text>(0);
+    for (i in trusted_origins.vals()) {
+      if (args.originUrl != i) {
+        b.add(i);
+      };
+    };
+    trusted_origins := Buffer.toArray(b);
   };
 
 };
