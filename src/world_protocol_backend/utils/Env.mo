@@ -35,10 +35,10 @@ module {
     public let ckBTCCanisterId = "mxzaz-hqaaa-aaaar-qaada-cai"; //ckBTC as ICRC-1 Token
 
     // For Production
-    // public let WorldHubCanisterId = "j362g-ziaaa-aaaap-abf6a-cai";
-    // public let VerifierCanisterId = "jvcsg-6aaaa-aaaan-qeqvq-cai";
+    public let WorldHubCanisterId = "j362g-ziaaa-aaaap-abf6a-cai";
+    public let VerifierCanisterId = "jvcsg-6aaaa-aaaan-qeqvq-cai";
 
     // For Staging
-    public let WorldHubCanisterId = "c5moj-piaaa-aaaal-qdhoq-cai";
-    public let VerifierCanisterId = "yv22q-myaaa-aaaal-adeuq-cai";
+    // public let WorldHubCanisterId = "c5moj-piaaa-aaaal-qdhoq-cai";
+    // public let VerifierCanisterId = "yv22q-myaaa-aaaal-adeuq-cai";
 };

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 
 
 export const loadWasm = async () => {
-	const buffer = await readFile(`./scripts/world.wasm`);
+	const buffer = await readFile(`./scripts/ic-icrc1-ledger.wasm`);
 	return [...new Uint8Array(buffer)];
 };
 

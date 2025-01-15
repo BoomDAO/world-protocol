@@ -1,57 +1,55 @@
 export const idlFactory = ({ IDL }) => {
-  const World = IDL.Record({
-    'name' : IDL.Text,
-    'cover' : IDL.Text,
-    'canister' : IDL.Text,
+  const BlockIndex = IDL.Nat;
+  const Tokens = IDL.Nat;
+  const Timestamp = IDL.Nat64;
+  const TransferError = IDL.Variant({
+    'GenericError' : IDL.Record({
+      'message' : IDL.Text,
+      'error_code' : IDL.Nat,
+    }),
+    'TemporarilyUnavailable' : IDL.Null,
+    'BadBurn' : IDL.Record({ 'min_burn_amount' : Tokens }),
+    'Duplicate' : IDL.Record({ 'duplicate_of' : BlockIndex }),
+    'BadFee' : IDL.Record({ 'expected_fee' : Tokens }),
+    'CreatedInFuture' : IDL.Record({ 'ledger_time' : Timestamp }),
+    'TooOld' : IDL.Null,
+    'InsufficientFunds' : IDL.Record({ 'balance' : Tokens }),
   });
-  const HeaderField = IDL.Tuple(IDL.Text, IDL.Text);
-  const HttpRequest = IDL.Record({
-    'url' : IDL.Text,
-    'method' : IDL.Text,
-    'body' : IDL.Vec(IDL.Nat8),
-    'headers' : IDL.Vec(HeaderField),
+  const TransferResult = IDL.Variant({
+    'Ok' : BlockIndex,
+    'Err' : TransferError,
   });
-  const HttpResponse = IDL.Record({
-    'body' : IDL.Vec(IDL.Nat8),
-    'headers' : IDL.Vec(HeaderField),
-    'status_code' : IDL.Nat16,
-  });
-  const Result = IDL.Variant({ 'ok' : IDL.Null, 'err' : IDL.Text });
   return IDL.Service({
-    'addAdmin' : IDL.Func([IDL.Text], [], []),
-    'createWorldCanister' : IDL.Func([IDL.Text, IDL.Text], [IDL.Text], []),
-    'cycleBalance' : IDL.Func([], [IDL.Nat], ['query']),
-    'getAllAdmins' : IDL.Func([], [IDL.Vec(IDL.Text)], ['query']),
-    'getAllWorlds' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Text))],
+    'createLeader' : IDL.Func([IDL.Text], [IDL.Nat], []),
+    'getAccountIdentifierForUser' : IDL.Func(
+        [IDL.Text],
+        [IDL.Text],
+        ['composite_query'],
+      ),
+    'getAccountIdentifierFromPrincipal' : IDL.Func(
+        [IDL.Text],
+        [IDL.Text],
         ['query'],
       ),
-    'getOwner' : IDL.Func([IDL.Text], [IDL.Opt(IDL.Text)], ['query']),
-    'getTotalWorlds' : IDL.Func([], [IDL.Nat], ['query']),
-    'getUserTotalWorlds' : IDL.Func([IDL.Text], [IDL.Nat], ['query']),
-    'getUserWorlds' : IDL.Func(
-        [IDL.Text, IDL.Nat],
-        [IDL.Vec(World)],
-        ['query'],
-      ),
-    'getWorldCover' : IDL.Func([IDL.Text], [IDL.Text], ['query']),
-    'getWorldDetails' : IDL.Func([IDL.Text], [IDL.Opt(World)], ['query']),
-    'getWorldWasmVersion' : IDL.Func([], [IDL.Text], ['query']),
-    'getWorlds' : IDL.Func([IDL.Nat], [IDL.Vec(World)], ['query']),
-    'http_request' : IDL.Func([HttpRequest], [HttpResponse], ['query']),
-    'removeAdmin' : IDL.Func([IDL.Text], [], []),
-    'updateWorldCover' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
-    'updateWorldName' : IDL.Func([IDL.Text, IDL.Text], [Result], []),
-    'updateWorldWasmModule' : IDL.Func(
-        [IDL.Record({ 'wasm' : IDL.Vec(IDL.Nat8), 'version' : IDL.Text })],
-        [IDL.Int],
+    'getLeaders' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
+    'getLeadersDiggyBalance' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Tuple(IDL.Text, IDL.Nat))],
         [],
       ),
-    'upgrade_worlds' : IDL.Func([IDL.Int], [], []),
-    'validate_upgrade_worlds' : IDL.Func(
-        [IDL.Int],
-        [IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text })],
+    'getLeadersTotalDiggyBalance' : IDL.Func([], [IDL.Nat], []),
+    'getSubaccountBalance' : IDL.Func([IDL.Text], [IDL.Nat], []),
+    'getSubaccountOfUserToTransfer' : IDL.Func(
+        [IDL.Text],
+        [IDL.Vec(IDL.Nat8)],
+        ['composite_query'],
+      ),
+    'getTotalBalance' : IDL.Func([IDL.Nat], [IDL.Nat], []),
+    'getUIDS' : IDL.Func([], [IDL.Vec(IDL.Text)], []),
+    'removeLeader' : IDL.Func([IDL.Text], [], []),
+    'settleBalance' : IDL.Func(
+        [IDL.Text, IDL.Text, IDL.Nat],
+        [TransferResult],
         [],
       ),
   });

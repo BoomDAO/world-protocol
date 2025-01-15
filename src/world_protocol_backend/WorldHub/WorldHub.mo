@@ -100,6 +100,23 @@ actor WorldHub {
         );
     };
 
+    public shared ({ caller }) func updateUserNodeSettings(usernodeId : Text) : async () {
+        assert(caller == Principal.fromText("2ot7t-idkzt-murdg-in2md-bmj2w-urej7-ft6wa-i4bd3-zglmv-pf42b-zqe"));
+        let cid = { canister_id = Principal.fromText(usernodeId) };
+        let IC : Management.Management = actor (ENV.IC_Management);
+        await (
+            IC.update_settings({
+                canister_id = cid.canister_id;
+                settings = {
+                    controllers = ?[WorldHubCanisterId(), caller];
+                    compute_allocation = null;
+                    memory_allocation = null;
+                    freezing_threshold = ?31_540_000;
+                };
+            })
+        );
+    };
+
     private func createCanister_() : async (Text) {
         Cycles.add(2000000000000);
         let canister = await UserNode.UserNode();

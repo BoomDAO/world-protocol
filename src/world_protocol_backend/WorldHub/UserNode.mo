@@ -54,10 +54,10 @@ actor class UserNode() {
   let { ihash; nhash; thash; phash; calcHash } = Map;
 
   // empty stable memory used for migration
-  private stable var _v1entities : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.entityId, V1EntityTypes.Entity>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [entities]]]
-  private stable var _v1actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, V1ActionTypes.ActionState>>> = Trie.empty();
-  private stable var _v1permissions : Trie.Trie<Text, Trie.Trie<Text, V1EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
-  private stable var _v1globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
+  // private stable var _v1entities : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.entityId, V1EntityTypes.Entity>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [entities]]]
+  // private stable var _v1actionStates : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.actionId, V1ActionTypes.ActionState>>> = Trie.empty();
+  // private stable var _v1permissions : Trie.Trie<Text, Trie.Trie<Text, V1EntityTypes.EntityPermission>> = Trie.empty(); // [key1 = "worldCanisterId + "+" + EntityId"] [key2 = Principal permitted] [Value = Entity Details]
+  // private stable var _v1globalPermissions : Trie.Trie<TGlobal.worldId, [TGlobal.worldId]> = Trie.empty(); // worldId -> Principal permitted to change all entities of world
 
   // active data of stable memory
   private stable var _entities : Trie.Trie<TGlobal.userId, Trie.Trie<TGlobal.worldId, Trie.Trie<TGlobal.entityId, EntityTypes.Entity>>> = Trie.empty(); //mapping [user_principal_id -> [world_canister_ids -> [entities]]]
@@ -70,10 +70,10 @@ actor class UserNode() {
 
   //pre-post upgrades
   system func preupgrade() {
-    _v1entities := _entities;
-    _v1actionStates := _actionStates;
-    _v1permissions := _permissions;
-    _v1globalPermissions := _globalPermissions;
+    // _v1entities := _entities;
+    // _v1actionStates := _actionStates;
+    // _v1permissions := _permissions;
+    // _v1globalPermissions := _globalPermissions;
   };
 
   system func postupgrade() {};
